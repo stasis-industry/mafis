@@ -34,12 +34,6 @@ const EXPERIMENTS: &[ExperimentInfo] = &[
         test_fn: "scheduler_effect",
     },
     ExperimentInfo {
-        name: "topology_small",
-        runs: 25,
-        description: "warehouse_medium, 10 agents, 5 scenarios \u{00d7} 5 seeds",
-        test_fn: "topology_small",
-    },
-    ExperimentInfo {
         name: "topology_medium",
         runs: 25,
         description: "warehouse_medium, 40 agents, 5 scenarios \u{00d7} 5 seeds",

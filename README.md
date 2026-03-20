@@ -20,7 +20,7 @@ Every simulation is seeded and reproducible. Every metric is differential: fault
 
 ## Findings
 
-2,700 experiment runs (30 seeds x 4 experiments), all metrics audited for scientific reliability.
+2,520 experiment runs (30 seeds x 4 experiments), all metrics audited for scientific reliability.
 
 ### Task scheduling impacts fault recovery 3.8x more than solver choice
 
