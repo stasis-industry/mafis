@@ -9,7 +9,7 @@ abstract: >-
 version: 0.1.0
 date-released: "2025-01-01"
 url: "https://stasis-website.vercel.app"
-repository-code: "https://github.com/stasis-industry/mafis"
+repository-code: "https://github.com/stasis-industries/mafis"
 license: MIT
 keywords:
   - multi-agent path finding
@@ -24,5 +24,5 @@ keywords:
   - PIBT
   - RHCR
 authors:
-  - name: "Stasis Industry"
+  - name: "Stasis industries"
     website: "https://stasis-website.vercel.app"
