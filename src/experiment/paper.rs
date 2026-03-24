@@ -111,7 +111,24 @@ fn intermittent() -> FaultScenario {
     }
 }
 
-/// All fault scenarios used in the paper.
+fn perm_zone_outage() -> FaultScenario {
+    // PermanentZoneOutage: entire busiest zone converted to obstacles at tick 100.
+    // Category 3 (permanent-localized) — models zone flooding, structural collapse,
+    // or fire suppression sealing off a warehouse section permanently.
+    FaultScenario {
+        enabled: true,
+        scenario_type: FaultScenarioType::PermanentZoneOutage,
+        perm_zone_at_tick: 100,
+        perm_zone_block_percent: 100.0,
+        ..Default::default()
+    }
+}
+
+/// All fault scenarios used in the paper (7 total: 3 categories).
+///
+/// Category 1 — Recoverable: ZoneOutage, IntermittentFault
+/// Category 2 — Permanent-distributed: BurstFailure (20%/50%), WearBased (medium/high)
+/// Category 3 — Permanent-localized: PermanentZoneOutage
 fn paper_scenarios() -> Vec<Option<FaultScenario>> {
     vec![
         Some(burst_20()),
@@ -120,6 +137,7 @@ fn paper_scenarios() -> Vec<Option<FaultScenario>> {
         Some(wear_high()),
         Some(zone_outage()),
         Some(intermittent()),
+        Some(perm_zone_outage()),
     ]
 }
 
@@ -347,39 +365,96 @@ mod tests {
     #[test]
     fn solver_resilience_count() {
         let m = solver_resilience();
-        assert_eq!(m.total_runs(), 720); // 4 x 6 x 30
+        assert_eq!(m.total_runs(), 840); // 4 x 7 x 30
     }
 
     #[test]
     fn topology_effect_count() {
         let matrices = topology_effect();
         let total: usize = matrices.iter().map(|m| m.total_runs()).sum();
-        assert_eq!(total, 720); // 4 x (6 x 30)
+        assert_eq!(total, 840); // 4 x (7 x 30)
     }
 
     #[test]
     fn scale_sensitivity_count() {
         let m = scale_sensitivity();
-        assert_eq!(m.total_runs(), 720); // 4 x 6 x 30
+        assert_eq!(m.total_runs(), 840); // 4 x 7 x 30
     }
 
     #[test]
     fn scheduler_effect_count() {
         let m = scheduler_effect();
-        assert_eq!(m.total_runs(), 360); // 2 x 6 x 30
+        assert_eq!(m.total_runs(), 420); // 2 x 7 x 30
     }
 
     #[test]
     fn all_paper_total() {
         let all = all_paper_experiments();
         let total: usize = all.iter().map(|(_, m)| m.total_runs()).sum();
-        assert_eq!(total, 2520);
+        assert_eq!(total, 2940); // 840+840+840+420
     }
 
     #[test]
     fn braess_resilience_count() {
         let m = braess_resilience();
-        assert_eq!(m.total_runs(), 6000); // 5 x 4 x 6 x 50
+        assert_eq!(m.total_runs(), 7000); // 5 x 4 x 7 x 50
+    }
+
+    /// Run the Category 3 (permanent zone outage) slice of the Braess experiment.
+    ///
+    /// Produces: results/braess_perm_zone_runs.csv + results/braess_perm_zone_summary.csv
+    /// Merge with braess_resilience_runs.csv for full 7-scenario analysis.
+    ///
+    /// Usage: cargo test run_braess_perm_zone -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn run_braess_perm_zone() {
+        use crate::experiment::export::{write_runs_csv, write_summary_csv};
+        use crate::experiment::runner::run_matrix;
+        use std::fs;
+
+        let matrix = ExperimentMatrix {
+            solvers: vec![
+                "pibt".into(),
+                "rhcr_pibt".into(),
+                "rhcr_pbs".into(),
+                "rhcr_priority_astar".into(),
+                "token_passing".into(),
+            ],
+            topologies: vec!["warehouse_medium".into()],
+            scenarios: vec![Some(perm_zone_outage())],
+            schedulers: vec!["random".into()],
+            agent_counts: vec![10, 20, 40, 80],
+            seeds: SEEDS_50.to_vec(),
+            tick_count: TICK_COUNT,
+        };
+
+        use crate::experiment::runner::ExperimentProgress;
+        use std::sync::{Arc, Mutex};
+
+        let total = matrix.total_runs();
+        eprintln!("Running {} runs...", total);
+        let progress = Arc::new(Mutex::new(ExperimentProgress {
+            current: 0,
+            total,
+            label: String::new(),
+        }));
+        let result = run_matrix(&matrix, Some(&progress));
+        eprintln!("Done in {}ms", result.wall_time_total_ms);
+
+        fs::create_dir_all("results").unwrap();
+
+        let mut f = fs::File::create("results/braess_perm_zone_runs.csv").unwrap();
+        write_runs_csv(&mut f, &result.runs).unwrap();
+
+        let mut f = fs::File::create("results/braess_perm_zone_summary.csv").unwrap();
+        write_summary_csv(&mut f, &result.summaries).unwrap();
+
+        eprintln!(
+            "Saved: braess_perm_zone_runs.csv ({} rows), braess_perm_zone_summary.csv ({} rows)",
+            result.runs.len() * 2,
+            result.summaries.len()
+        );
     }
 
     #[test]
