@@ -7,16 +7,19 @@ pub mod pibt_core;
 pub mod pibt_window_planner;
 pub mod priority_astar_planner;
 pub mod rhcr;
+pub mod token_common;
 pub mod token_passing;
 pub mod traits;
 pub mod windowed;
 pub mod guidance;
+pub mod rt_lacam;
 
 use bevy::prelude::*;
 
 use self::pibt::{PibtLifelongSolver, default_active_solver};
 use self::rhcr::{RhcrConfig, RhcrMode, RhcrSolver};
 use self::token_passing::TokenPassingSolver;
+use self::rt_lacam::RtLaCAMSolver;
 use self::lifelong::LifelongSolver;
 
 // ---------------------------------------------------------------------------
@@ -30,6 +33,7 @@ pub const SOLVER_NAMES: &[(&str, &str)] = &[
     ("rhcr_pibt", "RHCR (PIBT-Window) — Rolling-Horizon with PIBT"),
     ("rhcr_priority_astar", "RHCR (Priority A*) — Rolling-Horizon with Priority A*"),
     ("token_passing", "Token Passing — Decentralized Sequential Planning"),
+    ("rt_lacam", "RT-LaCAM — Real-Time Configuration-Space Search"),
 ];
 
 /// Create a LifelongSolver by name with auto-computed defaults.
@@ -54,6 +58,7 @@ pub fn lifelong_solver_from_name(
             Some(Box::new(RhcrSolver::new(cfg)))
         }
         "token_passing" => Some(Box::new(TokenPassingSolver::new())),
+        "rt_lacam" => Some(Box::new(RtLaCAMSolver::new(grid_area, num_agents))),
         _ => None,
     }
 }
