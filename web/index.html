@@ -263,14 +263,22 @@
                         title="MAPF algorithm used for path planning.">
                         <label class="input-label" for="input-solver">Algorithm</label>
                         <select class="input-select" id="input-solver">
-                            <option value="pibt">PIBT — Priority Inheritance</option>
-                            <option value="rhcr_pbs">RHCR (PBS)</option>
-                            <option value="rhcr_pibt">RHCR (PIBT-Window)</option>
-                            <option value="rhcr_priority_astar">RHCR (Priority A*)</option>
-                            <option value="token_passing">Token Passing</option>
-                            <option value="rt_lacam">RT-LaCAM — Config-Space DFS</option>
-                            <option value="tpts">TPTS — Token Passing + Swaps</option>
-                            <option value="pibt+apf">PIBT+APF — Potential Fields</option>
+                            <optgroup label="Reactive (suboptimal, fast)">
+                                <option value="pibt">PIBT — Priority Inheritance</option>
+                                <option value="pibt+apf">PIBT+APF — Potential Fields</option>
+                            </optgroup>
+                            <optgroup label="Windowed (suboptimal, planned)">
+                                <option value="rhcr_pbs">RHCR (PBS)</option>
+                                <option value="rhcr_pibt">RHCR (PIBT-Window)</option>
+                                <option value="rhcr_priority_astar">RHCR (Priority A*)</option>
+                            </optgroup>
+                            <optgroup label="Config-Space (suboptimal, global)">
+                                <option value="rt_lacam">RT-LaCAM — Config-Space DFS</option>
+                            </optgroup>
+                            <optgroup label="Decentralized (suboptimal, sequential)">
+                                <option value="token_passing">Token Passing</option>
+                                <option value="tpts">TPTS — Token Passing + Swaps</option>
+                            </optgroup>
                         </select>
                     </div>
 
