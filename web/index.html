@@ -13,7 +13,7 @@
     <!-- Primary Meta Tags -->
     <title>MAFIS — Multi-Agent Fault Injection Simulator</title>
     <meta name="title" content="MAFIS — Multi-Agent Fault Injection Simulator">
-    <meta name="description" content="Fault resilience observatory for lifelong multi-agent path finding (MAPF). Real-time 3D WebAssembly simulation measuring how warehouse robotics systems degrade, recover, and adapt under fault conditions. 5 solvers, up to 500 agents.">
+    <meta name="description" content="Fault resilience observatory for lifelong multi-agent path finding (MAPF). Real-time 3D WebAssembly simulation measuring how warehouse robotics systems degrade, recover, and adapt under fault conditions. 8 solvers, up to 500 agents.">
     <meta name="keywords" content="MAPF, multi-agent path finding, fault injection, warehouse robotics, simulation, PIBT, RHCR, fault resilience, WebAssembly, Bevy, lifelong MAPF, Token Passing">
     <meta name="author" content="Teddy Truong">
     <meta name="robots" content="index, follow">
@@ -31,7 +31,7 @@
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://stasis-website.vercel.app/">
     <meta property="og:title" content="MAFIS — Multi-Agent Fault Injection Simulator">
-    <meta property="og:description" content="Fault resilience observatory for lifelong MAPF. Real-time 3D WebAssembly simulation of warehouse robotics under fault conditions. 5 solvers, up to 500 agents.">
+    <meta property="og:description" content="Fault resilience observatory for lifelong MAPF. Real-time 3D WebAssembly simulation of warehouse robotics under fault conditions. 8 solvers, up to 500 agents.">
     <meta property="og:image" content="https://stasis-website.vercel.app/og-image.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
@@ -64,7 +64,7 @@
         "runtimePlatform": "WebAssembly (wasm32-unknown-unknown)",
         "featureList": [
             "Real-time 3D multi-agent simulation (up to 500 agents)",
-            "5 lifelong MAPF solvers: PIBT, RHCR-PBS, RHCR-PIBT, RHCR-Priority-A*, Token Passing",
+            "8 lifelong MAPF solvers: PIBT, 3 RHCR variants, Token Passing, RT-LaCAM, TPTS, PIBT+APF",
             "Fault injection with heat accumulation and Weibull wear modeling",
             "Action Dependency Graph (ADG) analysis",
             "Cascade failure propagation via bounded BFS",
@@ -88,7 +88,7 @@
         "datePublished": "2025-01-01",
         "dateModified": "2026-03-20",
         "license": "https://opensource.org/licenses/MIT",
-        "keywords": ["multi-agent path finding", "MAPF", "fault injection", "warehouse robotics", "fault resilience", "simulation", "WebAssembly", "lifelong MAPF", "PIBT", "RHCR"],
+        "keywords": ["multi-agent path finding", "MAPF", "fault injection", "warehouse robotics", "fault resilience", "simulation", "WebAssembly", "lifelong MAPF", "PIBT", "RHCR", "LaCAM", "Token Passing", "APF"],
         "isAccessibleForFree": true
     }
     </script>
@@ -113,7 +113,7 @@
             <li>Cascade failure propagation across agent networks via Action Dependency Graphs</li>
             <li>Recovery time and throughput degradation under configurable fault injection</li>
             <li>Heat accumulation and Weibull wear patterns on warehouse grid cells</li>
-            <li>Comparative resilience across 5 lifelong MAPF solvers (PIBT, 3 RHCR variants, Token Passing)</li>
+            <li>Comparative resilience across 8 lifelong MAPF solvers (PIBT, 3 RHCR variants, Token Passing, RT-LaCAM, TPTS, PIBT+APF)</li>
         </ul>
         <h2 style="font-size:1.1rem;margin-top:1rem">Key Features</h2>
         <ul>
@@ -268,6 +268,9 @@
                             <option value="rhcr_pibt">RHCR (PIBT-Window)</option>
                             <option value="rhcr_priority_astar">RHCR (Priority A*)</option>
                             <option value="token_passing">Token Passing</option>
+                            <option value="rt_lacam">RT-LaCAM — Config-Space DFS</option>
+                            <option value="tpts">TPTS — Token Passing + Swaps</option>
+                            <option value="pibt+apf">PIBT+APF — Potential Fields</option>
                         </select>
                     </div>
 
@@ -1007,6 +1010,9 @@
                                     <label class="checkbox-label"><input type="checkbox" value="rhcr_pbs"><span>RHCR-PBS</span></label>
                                     <label class="checkbox-label"><input type="checkbox" value="rhcr_priority_astar"><span>RHCR-A*</span></label>
                                     <label class="checkbox-label"><input type="checkbox" value="token_passing"><span>Token Passing</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="rt_lacam"><span>RT-LaCAM</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="tpts"><span>TPTS</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="pibt+apf"><span>PIBT+APF</span></label>
                                 </div>
                             </div>
                             <div class="exp-check-group">
