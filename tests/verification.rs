@@ -53,6 +53,9 @@ const SOLVERS: &[&str] = &[
     "rhcr_pibt",
     "rhcr_priority_astar",
     "token_passing",
+    "rt_lacam",
+    "tpts",
+    "pibt+apf",
 ];
 
 const TOPOLOGIES: &[(&str, usize)] = &[
@@ -400,6 +403,9 @@ fn all_solvers_no_collisions_500_ticks() {
         "rhcr_pbs",
         "rhcr_priority_astar",
         "token_passing",
+        "rt_lacam",
+        "tpts",
+        "pibt+apf",
     ];
 
     for solver_name in &solvers {
@@ -644,6 +650,9 @@ fn determinism_all_solvers_all_schedulers() {
         "rhcr_pbs",
         "rhcr_priority_astar",
         "token_passing",
+        "rt_lacam",
+        "tpts",
+        "pibt+apf",
     ];
     let schedulers = ["random", "closest"];
 
