@@ -1,11 +1,26 @@
 //! TPTS — Token Passing with Task Swaps.
 //!
-//! Extends Token Passing with goal swapping: after standard planning,
-//! pairs of nearby agents swap goals when it reduces total path cost.
-//! Swap cooldown and TaskLeg compatibility checks prevent oscillation.
+//! Extends Token Passing with goal swapping: when agent `ai` can reach agent
+//! `ai'`s goal faster than `ai'` can (measured by actual spacetime A* cost),
+//! the goals are swapped. Token state is snapshot/restored on swap failure.
 //!
-//! Reference: Ma et al., "Lifelong Multi-Agent Path Finding for Online
-//! Pickup and Delivery Tasks" (AAMAS 2017).
+//! Reference: Ma et al., "Lifelong Multi-Agent Path Finding for Online Pickup
+//! and Delivery Tasks" (AAMAS 2017), Algorithm 2.
+//!
+//! ## Paper Deviations (documented)
+//!
+//! 1. **No recursive GetTask**: the paper's Algorithm 2 recursively calls
+//!    GetTask so that a displaced agent can find itself a new task. In MAFIS,
+//!    the TaskScheduler (not the solver) owns task assignment, so recursive
+//!    reassignment is not possible. We use single-level swaps instead.
+//!
+//! 2. **No Path2 endpoint parking**: the paper requires idle agents to move
+//!    to "non-task endpoints" for deadlock avoidance. MAFIS doesn't have
+//!    designated parking endpoints; idle agents Wait in place.
+//!
+//! 3. **Swap cooldown**: not in the paper. Added to prevent oscillation
+//!    caused by the lack of recursive GetTask (without recursion, the same
+//!    pair would swap back and forth every tick).
 
 use bevy::prelude::*;
 use smallvec::smallvec;
@@ -32,6 +47,7 @@ use crate::constants::{
 // ---------------------------------------------------------------------------
 
 /// Two agents can only swap if their task legs are compatible.
+/// Paper: swap only for agents both heading to pickups (or both to deliveries).
 fn legs_compatible(a: &TaskLeg, b: &TaskLeg) -> bool {
     matches!(
         (a, b),
@@ -42,10 +58,35 @@ fn legs_compatible(a: &TaskLeg, b: &TaskLeg) -> bool {
 
 /// Canonical pair key — always (min, max) so (a,b) == (b,a).
 fn pair_key(a: usize, b: usize) -> (usize, usize) {
-    if a <= b {
-        (a, b)
-    } else {
-        (b, a)
+    if a <= b { (a, b) } else { (b, a) }
+}
+
+// ---------------------------------------------------------------------------
+// Token snapshot for swap rollback (paper Algorithm 2, line 21/33)
+// ---------------------------------------------------------------------------
+
+/// Lightweight snapshot of token paths for a pair of agents.
+/// Used to restore state if a swap attempt fails.
+struct TokenSnapshot {
+    local_a: usize,
+    local_b: usize,
+    path_a: VecDeque<IVec2>,
+    path_b: VecDeque<IVec2>,
+}
+
+impl TokenSnapshot {
+    fn save(token: &Token, local_a: usize, local_b: usize) -> Self {
+        Self {
+            local_a,
+            local_b,
+            path_a: token.paths[local_a].clone(),
+            path_b: token.paths[local_b].clone(),
+        }
+    }
+
+    fn restore(self, token: &mut Token) {
+        token.paths[self.local_a] = self.path_a;
+        token.paths[self.local_b] = self.path_b;
     }
 }
 
@@ -130,9 +171,10 @@ impl TptsSolver {
         self.initialized = true;
     }
 
-    fn plan_for_agent(
+    /// Plan a collision-free path from start to goal using spacetime A*.
+    /// Returns the path as position sequence, or None if no path found.
+    fn plan_path(
         &mut self,
-        _local: usize,
         start: IVec2,
         goal: IVec2,
         grid: &GridMap,
@@ -147,16 +189,9 @@ impl TptsSolver {
         let dm = maps[0];
 
         let actions = spacetime_astar_fast(
-            grid,
-            start,
-            goal,
-            &self.master_ci,
-            TOKEN_ASTAR_MAX_TIME,
-            Some(dm),
-            &mut self.stg,
-            ASTAR_MAX_EXPANSIONS,
-        )
-        .ok()?;
+            grid, start, goal, &self.master_ci, TOKEN_ASTAR_MAX_TIME,
+            Some(dm), &mut self.stg, ASTAR_MAX_EXPANSIONS,
+        ).ok()?;
 
         let mut positions = Vec::with_capacity(actions.len() + 1);
         positions.push(start);
@@ -169,14 +204,42 @@ impl TptsSolver {
         Some(positions)
     }
 
-    /// Find beneficial swaps: pairs where swapping goals reduces total Manhattan cost.
-    /// Filters by: compatible task legs, within radius, not in cooldown.
-    fn find_swaps(&mut self, agents: &[AgentState], tick: u64) -> Vec<(usize, usize)> {
+    /// Compute actual spacetime A* path cost from start to goal.
+    /// Returns None if no path exists (used for swap evaluation).
+    fn astar_cost(
+        &mut self,
+        start: IVec2,
+        goal: IVec2,
+        grid: &GridMap,
+        dist_cache: &mut DistanceMapCache,
+    ) -> Option<u64> {
+        if start == goal {
+            return Some(0);
+        }
+        let path = self.plan_path(start, goal, grid, dist_cache)?;
+        Some((path.len() - 1) as u64)  // path length = number of steps
+    }
+
+    /// Attempt swaps with snapshot/restore (paper Algorithm 2, lines 20-33).
+    ///
+    /// For each candidate pair (i, j):
+    /// 1. Check compatibility (task legs, radius, cooldown)
+    /// 2. Compute A* arrival times for current and swapped goals
+    /// 3. If ai reaches goal_j faster than ai' reaches goal_j: tentatively swap
+    /// 4. Try to plan both agents with swapped goals against constraint index
+    /// 5. If both plans succeed: commit swap. Otherwise: restore snapshot.
+    fn attempt_swaps(
+        &mut self,
+        agents: &[AgentState],
+        tick: u64,
+        grid: &GridMap,
+        dist_cache: &mut DistanceMapCache,
+    ) -> Vec<(usize, usize)> {
         // Clean up stale cooldown entries
         self.swap_cooldown
             .retain(|_, cooldown_tick| tick < *cooldown_tick + TPTS_SWAP_COOLDOWN);
 
-        let mut swaps = Vec::new();
+        let mut committed_swaps = Vec::new();
         let mut checks = 0;
 
         for i in 0..agents.len() {
@@ -204,7 +267,7 @@ impl TptsSolver {
                     continue;
                 }
 
-                // Distance filter
+                // Manhattan distance pre-filter (avoid expensive A* for distant pairs)
                 if manhattan(agents[i].pos, agents[j].pos) > self.swap_radius as u64 {
                     continue;
                 }
@@ -217,21 +280,87 @@ impl TptsSolver {
 
                 checks += 1;
 
-                // Cost comparison
-                let cost_current =
-                    manhattan(agents[i].pos, goal_i) + manhattan(agents[j].pos, goal_j);
-                let cost_swapped =
-                    manhattan(agents[i].pos, goal_j) + manhattan(agents[j].pos, goal_i);
+                // Paper criterion (Algorithm 2, line 26): compare arrival times.
+                // "Compare when ai reaches sj on its path in token to when ai'
+                //  reaches sj on its path in token'"
+                // We compare: does agent i reach goal_j faster than agent j?
+                let cost_i_to_goal_j = self.astar_cost(agents[i].pos, goal_j, grid, dist_cache);
+                let cost_j_to_goal_j = self.astar_cost(agents[j].pos, goal_j, grid, dist_cache);
 
-                if cost_swapped < cost_current {
-                    swaps.push((i, j));
-                    // Record cooldown
-                    self.swap_cooldown.insert(key, tick);
+                let (cost_i_j, cost_j_j) = match (cost_i_to_goal_j, cost_j_to_goal_j) {
+                    (Some(a), Some(b)) => (a, b),
+                    _ => continue, // can't evaluate — skip
+                };
+
+                // Agent i must reach goal_j STRICTLY faster than agent j
+                if cost_i_j >= cost_j_j {
+                    continue;
                 }
+
+                // Also check the reverse: agent j should reach goal_i reasonably
+                let cost_j_to_goal_i = self.astar_cost(agents[j].pos, goal_i, grid, dist_cache);
+                let cost_i_to_goal_i = self.astar_cost(agents[i].pos, goal_i, grid, dist_cache);
+
+                let (cost_j_i, cost_i_i) = match (cost_j_to_goal_i, cost_i_to_goal_i) {
+                    (Some(a), Some(b)) => (a, b),
+                    _ => continue,
+                };
+
+                // Total cost must decrease
+                if cost_i_j + cost_j_i >= cost_i_i + cost_j_j {
+                    continue;
+                }
+
+                // Tentative swap — snapshot token state (paper line 21)
+                let local_i = match self.agent_map.get(agents[i].index) {
+                    Some(&l) if l < self.token.paths.len() => l,
+                    _ => continue,
+                };
+                let local_j = match self.agent_map.get(agents[j].index) {
+                    Some(&l) if l < self.token.paths.len() => l,
+                    _ => continue,
+                };
+
+                let snapshot = TokenSnapshot::save(&self.token, local_i, local_j);
+
+                // Remove both agents' paths from constraint index
+                self.master_ci.remove_path(&self.token.paths[local_i], TOKEN_PATH_MAX_TIME);
+                self.master_ci.remove_path(&self.token.paths[local_j], TOKEN_PATH_MAX_TIME);
+
+                // Plan agent i toward goal_j
+                let plan_i = self.plan_path(agents[i].pos, goal_j, grid, dist_cache);
+
+                if let Some(ref positions_i) = plan_i {
+                    // Add i's new path to constraints so j plans against it
+                    let new_path_i: VecDeque<IVec2> = positions_i.iter().copied().collect();
+                    self.master_ci.add_path(&new_path_i, TOKEN_PATH_MAX_TIME);
+                    self.token.set_path(local_i, positions_i.clone());
+
+                    // Plan agent j toward goal_i
+                    let plan_j = self.plan_path(agents[j].pos, goal_i, grid, dist_cache);
+
+                    if let Some(ref positions_j) = plan_j {
+                        // Both plans succeeded — commit swap
+                        let new_path_j: VecDeque<IVec2> = positions_j.iter().copied().collect();
+                        self.master_ci.add_path(&new_path_j, TOKEN_PATH_MAX_TIME);
+                        self.token.set_path(local_j, positions_j.clone());
+                        self.swap_cooldown.insert(key, tick);
+                        committed_swaps.push((i, j));
+                        continue;
+                    }
+
+                    // Plan j failed — remove i's tentative path
+                    self.master_ci.remove_path(&new_path_i, TOKEN_PATH_MAX_TIME);
+                }
+
+                // Swap failed — restore snapshot (paper line 33)
+                snapshot.restore(&mut self.token);
+                self.master_ci.add_path(&self.token.paths[local_i], TOKEN_PATH_MAX_TIME);
+                self.master_ci.add_path(&self.token.paths[local_j], TOKEN_PATH_MAX_TIME);
             }
         }
 
-        swaps
+        committed_swaps
     }
 }
 
@@ -243,10 +372,10 @@ impl LifelongSolver for TptsSolver {
     fn info(&self) -> SolverInfo {
         SolverInfo {
             optimality: Optimality::Suboptimal,
-            complexity: "O(n × A* + swap_checks) per replan",
+            complexity: "O(n × A* + swap_checks × A*) per replan",
             scalability: Scalability::Medium,
             description:
-                "TPTS — Token Passing with Task Swaps. Decentralized sequential planning with goal swapping.",
+                "TPTS — Token Passing with Task Swaps. A* cost swap evaluation with snapshot/restore. Paper: Ma et al., AAMAS 2017.",
             recommended_max_agents: Some(100),
         }
     }
@@ -299,18 +428,26 @@ impl LifelongSolver for TptsSolver {
             self.master_ci.add_path(path, TOKEN_PATH_MAX_TIME);
         }
 
-        // TPTS extension: find beneficial swaps
-        let swaps = self.find_swaps(agents, ctx.tick);
+        // TPTS extension: attempt swaps with A* cost evaluation + snapshot/restore.
+        // Committed swaps have already updated token paths and master CI.
+        let committed_swaps = self.attempt_swaps(agents, ctx.tick, ctx.grid, distance_cache);
 
-        // Build swapped goals map
+        // Build swapped goals for agents involved in committed swaps
         let mut swapped_goals: Vec<Option<IVec2>> = agents.iter().map(|a| a.goal).collect();
-        for &(i, j) in &swaps {
+        for &(i, j) in &committed_swaps {
             let tmp = swapped_goals[i];
             swapped_goals[i] = swapped_goals[j];
             swapped_goals[j] = tmp;
         }
 
-        // Plan for agents that need replanning (using potentially swapped goals)
+        // Track which agents were already replanned by the swap phase
+        let mut swap_replanned = std::collections::HashSet::new();
+        for &(i, j) in &committed_swaps {
+            swap_replanned.insert(agents[i].index);
+            swap_replanned.insert(agents[j].index);
+        }
+
+        // Plan for remaining agents that need replanning
         let mut planning_order: Vec<usize> = (0..agents.len()).collect();
         planning_order.sort_by_key(|&i| {
             let has_task = !matches!(agents[i].task_leg, TaskLeg::Free);
@@ -319,6 +456,12 @@ impl LifelongSolver for TptsSolver {
 
         for &agent_idx in &planning_order {
             let a = &agents[agent_idx];
+
+            // Skip agents already handled by swap phase
+            if swap_replanned.contains(&a.index) {
+                continue;
+            }
+
             let local = match self.agent_map.get(a.index) {
                 Some(&l) if l < self.token.paths.len() => l,
                 _ => continue,
@@ -339,18 +482,9 @@ impl LifelongSolver for TptsSolver {
             let old_path = self.token.paths[local].clone();
             self.master_ci.remove_path(&old_path, TOKEN_PATH_MAX_TIME);
 
-            let path = self.plan_for_agent(local, a.pos, goal, ctx.grid, distance_cache);
+            let path = self.plan_path(a.pos, goal, ctx.grid, distance_cache);
 
             if let Some(positions) = path {
-                let actions: smallvec::SmallVec<[Action; 20]> = positions
-                    .windows(2)
-                    .map(|w| super::heuristics::delta_to_action(w[0], w[1]))
-                    .collect();
-
-                if !actions.is_empty() {
-                    self.plan_buffer.push((a.index, actions));
-                }
-
                 let new_path: VecDeque<IVec2> = positions.iter().copied().collect();
                 self.master_ci.add_path(&new_path, TOKEN_PATH_MAX_TIME);
                 self.token.set_path(local, positions);
@@ -359,16 +493,8 @@ impl LifelongSolver for TptsSolver {
             }
         }
 
-        // Emit next actions for agents with existing paths
-        self.replanned_set.clear();
-        self.replanned_set
-            .extend(self.plan_buffer.iter().map(|(idx, _)| *idx));
-
+        // Emit actions for ALL agents
         for a in agents {
-            if self.replanned_set.contains(&a.index) {
-                continue;
-            }
-
             let local = match self.agent_map.get(a.index) {
                 Some(&l) if l < self.token.paths.len() => l,
                 _ => continue,
@@ -419,10 +545,7 @@ mod tests {
         let mut cache = DistanceMapCache::default();
         let mut rng = SeededRng::new(42);
         let ctx = SolverContext {
-            grid: &grid,
-            zones: &zones,
-            tick: 0,
-            num_agents: 0,
+            grid: &grid, zones: &zones, tick: 0, num_agents: 0,
         };
         let result = solver.step(&ctx, &[], &mut cache, &mut rng);
         assert!(matches!(result, StepResult::Replan(plans) if plans.is_empty()));
@@ -440,18 +563,10 @@ mod tests {
 
         for tick in 0..20 {
             let agents = vec![AgentState {
-                index: 0,
-                pos,
-                goal: Some(goal),
-                has_plan: tick > 0,
+                index: 0, pos, goal: Some(goal), has_plan: tick > 0,
                 task_leg: TaskLeg::TravelEmpty(goal),
             }];
-            let ctx = SolverContext {
-                grid: &grid,
-                zones: &zones,
-                tick,
-                num_agents: 1,
-            };
+            let ctx = SolverContext { grid: &grid, zones: &zones, tick, num_agents: 1 };
             if let StepResult::Replan(plans) = solver.step(&ctx, &agents, &mut cache, &mut rng) {
                 if let Some((_, actions)) = plans.first() {
                     if let Some(action) = actions.first() {
@@ -459,93 +574,126 @@ mod tests {
                     }
                 }
             }
-            if pos == goal {
-                return;
-            }
+            if pos == goal { return; }
         }
         assert_eq!(pos, goal);
     }
 
     #[test]
-    fn tpts_swap_beneficial() {
+    fn tpts_swap_uses_astar_cost() {
+        // Agent 0 at (0,0) with goal (4,0): A* cost = 4
+        // Agent 1 at (3,0) with goal (1,0): A* cost = 2
+        // Swapped: Agent 0→(1,0) cost=1, Agent 1→(4,0) cost=1. Total 2 < 6.
+        // And Agent 0 reaches (1,0) faster than Agent 1 (1 < 2).
+        let grid = GridMap::new(5, 5);
+        let zones = test_zones();
         let mut solver = TptsSolver::new();
+        let mut cache = DistanceMapCache::default();
+        let mut rng = SeededRng::new(42);
+
         let agents = vec![
             AgentState {
-                index: 0,
-                pos: IVec2::new(0, 0),
-                goal: Some(IVec2::new(4, 0)),
-                has_plan: false,
-                task_leg: TaskLeg::TravelEmpty(IVec2::new(4, 0)),
+                index: 0, pos: IVec2::new(0, 0), goal: Some(IVec2::new(4, 0)),
+                has_plan: false, task_leg: TaskLeg::TravelEmpty(IVec2::new(4, 0)),
             },
             AgentState {
-                index: 1,
-                pos: IVec2::new(3, 0),
-                goal: Some(IVec2::new(1, 0)),
-                has_plan: false,
-                task_leg: TaskLeg::TravelEmpty(IVec2::new(1, 0)),
+                index: 1, pos: IVec2::new(3, 0), goal: Some(IVec2::new(1, 0)),
+                has_plan: false, task_leg: TaskLeg::TravelEmpty(IVec2::new(1, 0)),
             },
         ];
-        // Current: 0→(4,0) costs 4, 1→(1,0) costs 2. Total = 6.
-        // Swapped: 0→(1,0) costs 1, 1→(4,0) costs 1. Total = 2.
-        let swaps = solver.find_swaps(&agents, 0);
-        assert!(!swaps.is_empty());
-        assert_eq!(swaps[0], (0, 1));
+
+        // Initialize and build constraint index
+        solver.ensure_initialized(&agents);
+        solver.master_ci.reset(grid.width, grid.height, TOKEN_PATH_MAX_TIME);
+        for path in &solver.token.paths {
+            solver.master_ci.add_path(path, TOKEN_PATH_MAX_TIME);
+        }
+
+        let swaps = solver.attempt_swaps(&agents, 0, &grid, &mut cache);
+        assert!(!swaps.is_empty(), "should find a swap using A* costs");
     }
 
     #[test]
-    fn tpts_no_swap_incompatible_legs() {
+    fn tpts_swap_restores_on_incompatible() {
         let mut solver = TptsSolver::new();
         let agents = vec![
             AgentState {
-                index: 0,
-                pos: IVec2::new(0, 0),
-                goal: Some(IVec2::new(4, 0)),
-                has_plan: false,
-                task_leg: TaskLeg::TravelEmpty(IVec2::new(4, 0)),
+                index: 0, pos: IVec2::new(0, 0), goal: Some(IVec2::new(4, 0)),
+                has_plan: false, task_leg: TaskLeg::TravelEmpty(IVec2::new(4, 0)),
             },
             AgentState {
-                index: 1,
-                pos: IVec2::new(3, 0),
-                goal: Some(IVec2::new(1, 0)),
-                has_plan: false,
-                task_leg: TaskLeg::Free, // Incompatible with TravelEmpty
+                index: 1, pos: IVec2::new(3, 0), goal: Some(IVec2::new(1, 0)),
+                has_plan: false, task_leg: TaskLeg::Free, // Incompatible
             },
         ];
-        let swaps = solver.find_swaps(&agents, 0);
-        assert!(swaps.is_empty());
+
+        let grid = GridMap::new(5, 5);
+        let mut cache = DistanceMapCache::default();
+
+        solver.ensure_initialized(&agents);
+        solver.master_ci.reset(grid.width, grid.height, TOKEN_PATH_MAX_TIME);
+        for path in &solver.token.paths {
+            solver.master_ci.add_path(path, TOKEN_PATH_MAX_TIME);
+        }
+
+        let swaps = solver.attempt_swaps(&agents, 0, &grid, &mut cache);
+        assert!(swaps.is_empty(), "incompatible legs should prevent swap");
     }
 
     #[test]
     fn tpts_swap_cooldown() {
+        let grid = GridMap::new(5, 5);
+
+        // Test cooldown directly via the HashMap
         let mut solver = TptsSolver::new();
+        let mut cache = DistanceMapCache::default();
+
         let agents = vec![
             AgentState {
-                index: 0,
-                pos: IVec2::new(0, 0),
-                goal: Some(IVec2::new(4, 0)),
-                has_plan: false,
-                task_leg: TaskLeg::TravelEmpty(IVec2::new(4, 0)),
+                index: 0, pos: IVec2::new(0, 0), goal: Some(IVec2::new(4, 0)),
+                has_plan: false, task_leg: TaskLeg::TravelEmpty(IVec2::new(4, 0)),
             },
             AgentState {
-                index: 1,
-                pos: IVec2::new(3, 0),
-                goal: Some(IVec2::new(1, 0)),
-                has_plan: false,
-                task_leg: TaskLeg::TravelEmpty(IVec2::new(1, 0)),
+                index: 1, pos: IVec2::new(3, 0), goal: Some(IVec2::new(1, 0)),
+                has_plan: false, task_leg: TaskLeg::TravelEmpty(IVec2::new(1, 0)),
             },
         ];
 
-        // First call: swap found
-        let swaps = solver.find_swaps(&agents, 0);
-        assert!(!swaps.is_empty());
+        solver.ensure_initialized(&agents);
+        solver.master_ci.reset(grid.width, grid.height, TOKEN_PATH_MAX_TIME);
+        for path in &solver.token.paths {
+            solver.master_ci.add_path(path, TOKEN_PATH_MAX_TIME);
+        }
 
-        // Immediately after: cooldown prevents re-swap
-        let swaps = solver.find_swaps(&agents, 1);
-        assert!(swaps.is_empty(), "cooldown should prevent re-swap");
+        // First call: swap found and committed
+        let swaps = solver.attempt_swaps(&agents, 0, &grid, &mut cache);
+        assert!(!swaps.is_empty(), "should find initial swap");
 
-        // After cooldown expires
-        let swaps = solver.find_swaps(&agents, TPTS_SWAP_COOLDOWN + 1);
-        assert!(!swaps.is_empty(), "swap should be allowed after cooldown");
+        // Verify cooldown was recorded
+        let key = pair_key(agents[0].index, agents[1].index);
+        assert!(solver.swap_cooldown.contains_key(&key), "cooldown should be recorded");
+
+        // Immediately after: cooldown prevents re-swap (even with fresh state)
+        let mut solver2 = TptsSolver::new();
+        solver2.swap_cooldown = solver.swap_cooldown.clone();
+        solver2.ensure_initialized(&agents);
+        solver2.master_ci.reset(grid.width, grid.height, TOKEN_PATH_MAX_TIME);
+        for path in &solver2.token.paths {
+            solver2.master_ci.add_path(path, TOKEN_PATH_MAX_TIME);
+        }
+        let swaps = solver2.attempt_swaps(&agents, 1, &grid, &mut cache);
+        assert!(swaps.is_empty(), "cooldown should prevent re-swap at tick 1");
+
+        // After cooldown expires: swap allowed again
+        let mut solver3 = TptsSolver::new();
+        solver3.swap_cooldown = solver.swap_cooldown.clone();
+        solver3.ensure_initialized(&agents);
+        solver3.master_ci.reset(grid.width, grid.height, TOKEN_PATH_MAX_TIME);
+        for path in &solver3.token.paths {
+            solver3.master_ci.add_path(path, TOKEN_PATH_MAX_TIME);
+        }
+        let swaps = solver3.attempt_swaps(&agents, TPTS_SWAP_COOLDOWN + 1, &grid, &mut cache);
+        assert!(!swaps.is_empty(), "swap should be allowed after cooldown expires");
     }
 
     #[test]
@@ -571,20 +719,12 @@ mod tests {
         for tick in 0..30 {
             let agents: Vec<AgentState> = (0..2)
                 .map(|i| AgentState {
-                    index: i,
-                    pos: positions[i],
-                    goal: Some(goals[i]),
-                    has_plan: tick > 0,
-                    task_leg: TaskLeg::TravelEmpty(goals[i]),
+                    index: i, pos: positions[i], goal: Some(goals[i]),
+                    has_plan: tick > 0, task_leg: TaskLeg::TravelEmpty(goals[i]),
                 })
                 .collect();
 
-            let ctx = SolverContext {
-                grid: &grid,
-                zones: &zones,
-                tick,
-                num_agents: 2,
-            };
+            let ctx = SolverContext { grid: &grid, zones: &zones, tick, num_agents: 2 };
             if let StepResult::Replan(plans) = solver.step(&ctx, &agents, &mut cache, &mut rng) {
                 for (idx, actions) in plans {
                     if let Some(action) = actions.first() {
@@ -592,10 +732,7 @@ mod tests {
                     }
                 }
             }
-            assert_ne!(
-                positions[0], positions[1],
-                "vertex collision at tick {tick}"
-            );
+            assert_ne!(positions[0], positions[1], "vertex collision at tick {tick}");
         }
     }
 }
