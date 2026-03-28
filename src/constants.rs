@@ -168,7 +168,7 @@ pub const ASTAR_MAX_EXPANSIONS: u64 = 5_000;
 #[cfg(target_arch = "wasm32")]
 pub const RT_LACAM_NODE_BUDGET: usize = 2_000;
 #[cfg(not(target_arch = "wasm32"))]
-pub const RT_LACAM_NODE_BUDGET: usize = 10_000;
+pub const RT_LACAM_NODE_BUDGET: usize = 2_000;
 
 /// Maximum plan horizon (steps). Plans longer than this are committed.
 pub const RT_LACAM_MAX_HORIZON: usize = 30;
