@@ -399,17 +399,14 @@ impl RtLaCAMSolver {
                 }
                 candidates.push(agent_pos); // Wait
 
-                // Create child LLNs — each constrains this agent to a different position
+                // Create child LLNs — each constrains this agent to a different position.
+                // Reuse parent's constraint vectors: clone once, push for each child.
                 for &cand in &candidates {
-                    let mut child_who = lln.who.clone();
-                    let mut child_where = lln.where_.clone();
-                    child_who.push(agent_to_constrain);
-                    child_where.push(cand);
-                    self.arena[node_id].tree.push_back(LowLevelNode {
-                        who: child_who,
-                        where_: child_where,
-                        depth: lln.depth + 1,
-                    });
+                    let mut child = lln.clone();
+                    child.who.push(agent_to_constrain);
+                    child.where_.push(cand);
+                    child.depth += 1;
+                    self.arena[node_id].tree.push_back(child);
                 }
             }
 
@@ -424,7 +421,6 @@ impl RtLaCAMSolver {
 
             if let Some(&existing_id) = self.explored.get(&new_hash) {
                 // Revisit known config — add neighbor link and push to open
-                // (this triggers new constraint generation on next visit)
                 if !self.arena[node_id].neighbors.contains(&existing_id) {
                     self.arena[node_id].neighbors.push(existing_id);
                     self.arena[existing_id].neighbors.push(node_id);
@@ -443,6 +439,12 @@ impl RtLaCAMSolver {
                 self.arena[node_id].neighbors.push(new_id);
                 self.arena[new_id].neighbors.push(node_id);
                 self.open.push_front(new_id);
+
+                // Early exit: if this is a depth-1 child from the current root,
+                // we have a usable next step. Stop searching immediately.
+                if g == 1 {
+                    return;
+                }
             }
         }
     }
