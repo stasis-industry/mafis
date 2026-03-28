@@ -36,7 +36,7 @@ fn run_multi_seed(solver: &str, topology: &str, agents: usize, ticks: u64, seeds
 
 const SEEDS: &[u64] = &[42, 123, 456, 789, 1024];
 
-// ═════════════════════════════════════════════════════════════════════════
+// =========================================================================
 // Property 1: Throughput saturation
 //
 // Published property (Okumura 2022, Li et al. 2021, Chen et al. 2024):
@@ -44,9 +44,9 @@ const SEEDS: &[u64] = &[42, 123, 456, 789, 1024];
 // count then saturates or decreases at high density. There exists a density
 // where adding agents no longer helps.
 //
-// Test: run PIBT at increasing densities, verify throughput peaks then
-// plateaus or declines.
-// ═════════════════════════════════════════════════════════════════════════
+// Test: run PIBT at increasing densities, verify per-agent throughput
+// decreases at high density compared to low density.
+// =========================================================================
 
 #[test]
 fn property_throughput_saturation_pibt() {
@@ -72,22 +72,22 @@ fn property_throughput_saturation_pibt() {
     let per_agent_high = throughputs[5].1; // n=80
     assert!(
         per_agent_high < per_agent_low,
-        "per-agent throughput at n=80 ({per_agent_high:.3}) should be lower than n=5 ({per_agent_low:.3}) — saturation",
+        "per-agent throughput at n=80 ({per_agent_high:.3}) should be lower than n=5 ({per_agent_low:.3}): saturation expected",
     );
 
-    eprintln!("✓ PIBT throughput saturation confirmed: per-agent drops from {per_agent_low:.3} (n=5) to {per_agent_high:.3} (n=80)");
+    eprintln!("[OK] PIBT throughput saturation confirmed: per-agent drops from {per_agent_low:.3} (n=5) to {per_agent_high:.3} (n=80)");
 }
 
-// ═════════════════════════════════════════════════════════════════════════
+// =========================================================================
 // Property 2: PIBT completeness (liveness on connected graphs)
 //
 // Published property (Okumura 2022): PIBT is complete for well-formed
-// instances — no permanent deadlock on connected graphs. Every agent
+// instances. No permanent deadlock on connected graphs. Every agent
 // eventually reaches its goal.
 //
 // Test: run PIBT for enough ticks with moderate density. Verify that
-// tasks are completed (throughput > 0) and no agent is permanently stuck.
-// ═════════════════════════════════════════════════════════════════════════
+// tasks are completed (throughput > 0) on every topology.
+// =========================================================================
 
 #[test]
 fn property_pibt_completeness() {
@@ -105,52 +105,49 @@ fn property_pibt_completeness() {
             );
         }
         let avg = run_multi_seed("pibt", topo, agents, ticks, SEEDS);
-        eprintln!("✓ PIBT completeness on {topo}: avg {avg:.1} tasks in {ticks} ticks");
+        eprintln!("[OK] PIBT completeness on {topo}: avg {avg:.1} tasks in {ticks} ticks");
     }
 }
 
-// ═════════════════════════════════════════════════════════════════════════
-// Property 3: Priority inheritance observability
+// =========================================================================
+// Property 3: PIBT liveness at high density
 //
-// Published property (Okumura 2022): PIBT uses priority inheritance —
-// higher-priority agents make progress even under congestion. An agent
-// that has been waiting longest gets the highest priority and should
-// move first.
+// PIBT should remain live (produce tasks) even at high agent density.
+// This tests that the solver does not deadlock on a dense grid.
 //
-// Test: at high density (where congestion is real), verify that
-// throughput remains positive — priorities prevent total deadlock.
-// Compare against a density where a naive non-priority approach would
-// likely deadlock.
-// ═════════════════════════════════════════════════════════════════════════
+// Note: this does not specifically isolate priority inheritance as the
+// mechanism. It verifies the observable consequence: continued task
+// completion under congestion.
+// =========================================================================
 
 #[test]
-fn property_priority_inheritance_prevents_deadlock() {
-    let topology = "compact_grid"; // Dense 24×24 grid, many potential deadlocks
+fn property_pibt_liveness_at_high_density() {
+    let topology = "compact_grid"; // 24x24 grid
     let ticks = 500;
 
-    // Even at high density, PIBT should produce tasks
     for &n in &[30, 50, 70] {
         let avg = run_multi_seed("pibt", topology, n, ticks, SEEDS);
         assert!(
             avg > 0.0,
-            "PIBT deadlocked at n={n} on {topology} — priority inheritance failure"
+            "PIBT produced 0 tasks at n={n} on {topology}: liveness failure"
         );
-        eprintln!("✓ PIBT n={n} on {topology}: {avg:.1} tasks (no deadlock)");
+        eprintln!("[OK] PIBT n={n} on {topology}: {avg:.1} tasks (no deadlock)");
     }
 }
 
-// ═════════════════════════════════════════════════════════════════════════
-// Property 4: Solver paradigm ordering
+// =========================================================================
+// Property 4: All solvers functional
 //
-// Expected from literature (Li et al. 2021, Ma et al. 2017):
-// - Reactive solvers (PIBT) are fast but suboptimal at low density
-// - Windowed solvers (RHCR) can improve throughput at moderate density
-// - Token Passing is conservative — sequential planning limits throughput
+// Verify that all 8 solvers produce positive throughput and that no
+// solver is orders of magnitude worse than the others (which would
+// indicate a broken implementation).
 //
-// Test: verify that all solvers produce positive throughput, and that
-// Token Passing does not exceed PIBT by a large margin (TP's sequential
-// nature is inherently less efficient than PIBT's parallel decisions).
-// ═════════════════════════════════════════════════════════════════════════
+// Note: relative ordering between solvers depends on density. At low
+// density (n=20), Token Passing can outperform PIBT because its
+// sequential A* planning produces efficient paths when congestion is
+// low. This reverses at high density. We do not assert a specific
+// ordering here.
+// =========================================================================
 
 #[test]
 fn property_solver_paradigm_consistency() {
@@ -172,34 +169,32 @@ fn property_solver_paradigm_consistency() {
         results.push((solver, avg));
     }
 
-    // Verify all solvers are in a reasonable range: no solver should be
-    // more than 100x better than the worst (catches broken solvers that
-    // produce near-zero throughput).
+    // All solvers must produce tasks, and no solver should be more than
+    // 100x better than the worst (catches broken implementations).
     let min_t = results.iter().map(|(_, t)| *t).fold(f64::MAX, f64::min);
     let max_t = results.iter().map(|(_, t)| *t).fold(f64::MIN, f64::max);
     assert!(
         min_t > 0.0,
         "At least one solver produced 0 tasks"
     );
-    // Note: Token Passing can legitimately outperform PIBT at low density
-    // (n=20) because its sequential A* planning produces efficient paths
-    // when congestion is low. This reverses at high density. We don't
-    // assert a specific ordering — just that all solvers are functional.
+    assert!(
+        max_t < min_t * 100.0,
+        "Solver spread too large ({min_t:.1} to {max_t:.1}): likely broken solver"
+    );
 
-    eprintln!("✓ All 8 solvers functional: range {min_t:.1} to {max_t:.1} tasks");
+    eprintln!("[OK] All 8 solvers functional: range {min_t:.1} to {max_t:.1} tasks");
 }
 
-// ═════════════════════════════════════════════════════════════════════════
-// Property 5: Throughput scaling across topologies
+// =========================================================================
+// Property 5: Topology sensitivity
 //
 // Expected: throughput depends on topology structure. Maps with more
 // corridors and chokepoints should produce lower per-agent throughput
 // at the same density.
 //
 // Test: verify that different topologies produce different throughput
-// profiles — the tool is sensitive to topology, not producing constant
-// output regardless of map structure.
-// ═════════════════════════════════════════════════════════════════════════
+// profiles. The tool should be sensitive to map structure.
+// =========================================================================
 
 #[test]
 fn property_topology_sensitivity() {
@@ -222,13 +217,13 @@ fn property_topology_sensitivity() {
 
     assert!(
         max_t > min_t * 1.1,
-        "All topologies produce similar throughput ({min_t:.1} to {max_t:.1}) — tool not topology-sensitive"
+        "All topologies produce similar throughput ({min_t:.1} to {max_t:.1}): tool not topology-sensitive"
     );
 
-    eprintln!("✓ Topology sensitivity confirmed: range {min_t:.1} to {max_t:.1}");
+    eprintln!("[OK] Topology sensitivity confirmed: range {min_t:.1} to {max_t:.1}");
 }
 
-// ═════════════════════════════════════════════════════════════════════════
+// =========================================================================
 // Property 6: Differential measurement validity
 //
 // Core tool property: faulted run should differ from baseline when faults
@@ -238,7 +233,7 @@ fn property_topology_sensitivity() {
 // Test: run with and without faults on the same seed. Verify that:
 // (a) No-fault runs are identical (determinism)
 // (b) Faulted runs differ from baseline (faults have measurable effect)
-// ═════════════════════════════════════════════════════════════════════════
+// =========================================================================
 
 #[test]
 fn property_differential_measurement_validity() {
@@ -255,7 +250,7 @@ fn property_differential_measurement_validity() {
             "Baseline runs differ (seed={seed}): {baseline_1} vs {baseline_2} — determinism broken"
         );
     }
-    eprintln!("✓ Determinism: 3 seeds produce identical paired baselines");
+    eprintln!("[OK] Determinism: 3 seeds produce identical paired baselines");
 
     // Test 2: faults have measurable effect (aggregate across seeds)
     // Use 50% burst kill at tick 50 for a strong, unmissable signal.
@@ -294,5 +289,5 @@ fn property_differential_measurement_validity() {
         "Faulted avg ({faulted_avg:.1}) ≈ baseline avg ({baseline_avg:.1}) — faults have no aggregate effect"
     );
 
-    eprintln!("✓ Differential measurement valid: faults produce measurable aggregate effect");
+    eprintln!("[OK] Differential measurement valid: faults produce measurable aggregate effect");
 }
