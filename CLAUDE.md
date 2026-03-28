@@ -91,7 +91,7 @@ src/
   lib.rs           # wasm_bindgen exports + plugin registration
   main.rs          # fn main() entry point
   core/            # Tick loop, agents, grid, state machine, seed, actions, task scheduling, topology
-  solver/          # PIBT (lifelong-native) + shared heuristics + A*
+  solver/          # 8 lifelong solvers (PIBT, 3 RHCR, TP, RT-LaCAM, TPTS, PIBT+APF) + shared heuristics + A*
   fault/           # Heat/wear accumulation, fault detection, replanning
   analysis/        # ADG, cascade BFS, metrics, heatmap, resilience scorecard
   render/          # Environment, robot visuals (MaterialPalette), orbit camera, picking/hover
@@ -158,25 +158,36 @@ trait LifelongSolver: Send + Sync + 'static {
 ```
 
 - `ActiveSolver` resource: `Box<dyn LifelongSolver>`
-- Factory: `lifelong_solver_from_name("pibt"|"rhcr_pbs"|"rhcr_pibt"|"rhcr_priority_astar"|"token_passing", grid_area, num_agents)`
+- Factory: `lifelong_solver_from_name("pibt"|"rhcr_pbs"|"rhcr_pibt"|"rhcr_priority_astar"|"token_passing"|"rt_lacam"|"tpts"|"pibt+apf", grid_area, num_agents)`
+- Composition syntax: `"pibt+apf"` parsed by `split_once('+')` — base solver + dedicated APF integration
 - Pre-allocated reusable buffer (`Vec<AgentPlan>`) — zero allocation on replan
 - `StepResult::Continue` = zero-cost (counter check only)
+- `set_cell_bias()` — optional method for guidance layers (default no-op, overridden by PibtLifelongSolver)
 
-### Solvers
+### Solvers (8 total, 5 paradigms)
 
-| Solver | File | Characteristic |
-|--------|------|----------------|
-| PIBT | `pibt.rs` | Reactive, one-step priority inheritance; replans every tick |
-| RHCR (PBS) | `rhcr.rs` + `pbs_planner.rs` | Windowed PBS with node limit; replans every W ticks |
-| RHCR (PIBT-Window) | `rhcr.rs` + `pibt_window_planner.rs` | Unrolled PIBT for H steps; fast, cooperative |
-| RHCR (Priority A*) | `rhcr.rs` + `priority_astar_planner.rs` | Sequential spacetime A*; good for moderate density |
-| Token Passing | `token_passing.rs` | Decentralized sequential planning via shared TOKEN; ≤100 agents |
+| Solver | File | Paradigm | Characteristic |
+|--------|------|----------|----------------|
+| PIBT | `pibt.rs` | Reactive | One-step priority inheritance; replans every tick |
+| RHCR (PBS) | `rhcr.rs` + `pbs_planner.rs` | Windowed | PBS with node limit; replans every W ticks |
+| RHCR (PIBT-Window) | `rhcr.rs` + `pibt_window_planner.rs` | Windowed | Unrolled PIBT for H steps; fast, cooperative |
+| RHCR (Priority A*) | `rhcr.rs` + `priority_astar_planner.rs` | Windowed | Sequential spacetime A*; good for moderate density |
+| Token Passing | `token_passing.rs` | Decentralized | Sequential planning via shared TOKEN; ≤100 agents |
+| RT-LaCAM | `rt_lacam.rs` | Config-Space | Real-time lazy constraint DFS with PIBT config generator; persistent search + rerooting |
+| TPTS | `tpts.rs` | Decentralized | Token Passing + task swaps; A* cost evaluation + snapshot/restore |
+| PIBT+APF | `apf_guidance.rs` | Meta + Reactive | PIBT with sequential APF; exponential decay w*gamma^(-dist), updated inside PIBT recursion |
+
+### Shared Modules
+
+- `pibt_core.rs`: shared PIBT algorithm used by PIBT, PIBT+APF, PIBT-Window, RHCR fallback, RT-LaCAM config generator
+- `token_common.rs`: shared Token + MasterConstraintIndex used by Token Passing and TPTS
+- `guidance.rs`: `GuidanceLayer` trait + `GuidedSolver` wrapper (for future static meta-layers like GGO; NOT used by PIBT+APF which needs sequential update)
 
 ### RHCR Architecture (Strategy Pattern)
 
 - `WindowedPlanner` inner trait: PBS, PIBT-Window, Priority A* each implement `plan_window()`
 - `RhcrSolver` owns `Box<dyn WindowedPlanner>` + handles windowing + fallback
-- `PibtCore` (`pibt_core.rs`): shared algorithm used by standalone PIBT, PIBT-Window, and RHCR fallback
+- `PibtCore` (`pibt_core.rs`): shared algorithm used by standalone PIBT, PIBT-Window, RHCR fallback, RT-LaCAM config generator, and PIBT+APF
 - `RhcrConfig::auto(mode, grid_area, num_agents)`: smart defaults for H, W, node_limit
 - Three fallback modes: PerAgent, Full, Tiered (default per RHCR mode, user-overridable)
 - Congestion detection: dynamic replan interval shortens when >50% agents stuck
@@ -186,10 +197,33 @@ trait LifelongSolver: Send + Sync + 'static {
 ### Token Passing Architecture
 
 - `TokenPassingSolver` (`token_passing.rs`): decentralized sequential planning
+- `TptsSolver` (`tpts.rs`): extends TP with goal swapping (A* cost comparison, snapshot/restore)
+- Shared via `token_common.rs`: `Token` (path store) + `MasterConstraintIndex` (ref-counted constraints)
 - TOKEN stores all agents' planned paths as `Vec<IVec2>` position sequences
 - Idle agents plan via spacetime A* against ConstraintIndex built from all other TOKEN paths
 - Sequential planning order: tasked agents first (PIBT_MAPD-style prioritization)
 - Handles fault-induced path divergence: resets token when actual position ≠ expected
+
+### RT-LaCAM Architecture
+
+- `RtLaCAMSolver` (`rt_lacam.rs`): paper-accurate implementation (Liang et al., SoCS 2025)
+- Arena-based node storage: `HighLevelNode` with parent pointers + `LowLevelNode` constraint tree
+- PIBT as configuration generator via `PibtCore::one_step_constrained()`
+- Rerooting: parent pointer swap when agents physically move between ticks
+- Persistent explored map (`HashMap<ConfigHash, NodeId>`) across all ticks
+- Path extraction via parent chain backtracking + BFS fallback
+- Formula-based Zobrist hash (zero allocation, splitmix64 mixing)
+- Budget-bounded expansion (`RT_LACAM_NODE_BUDGET` per tick)
+- Memory cap (`RT_LACAM_MAX_VISITED`) triggers search restart
+
+### PIBT+APF Architecture
+
+- `PibtApfSolver` (`apf_guidance.rs`): paper-accurate (Pertzovsky et al., arXiv:2505.22753)
+- APF updated sequentially INSIDE PIBT recursion (after each agent commits, project future path, add APF)
+- Formula: `w * gamma^(-dist)` for Manhattan dist ≤ d_max (exponential decay)
+- Goal cell always returns bias 0
+- Parameters from paper Table 1: w=0.1, gamma=3, d_max=2, t_max=2
+- NOT a `GuidanceLayer` wrapper (sequential update requirement incompatible with pre-computed bias)
 
 ## Topology (`src/core/topology.rs`, `topologies/*.json`)
 
@@ -204,6 +238,8 @@ Topologies are defined exclusively as JSON files in `topologies/`. No Rust-gener
 - `ZoneMap` resource: pickup_cells, delivery_cells, corridor_cells, queue_lines, zone_type HashMap
 - Bridge command: `set_topology "warehouse_medium"|"warehouse_medium"` (any id from registry)
 - To add a new topology: create JSON in `topologies/`, run `sh topologies/build-manifest.sh`
+- `parse_movingai_map(text)`: parses MovingAI `.map` files → (GridMap, ZoneMap) for benchmark testing
+- `assign_random_zones(zones, n_pickup, n_delivery)`: designates corridor cells as pickup/delivery zones
 
 ## Task Scheduling (`src/core/task.rs`)
 
@@ -281,7 +317,7 @@ All tunable limits live here. Never hardcode magic numbers elsewhere.
 | Instanced rendering | 500 agents in 1 draw call |
 | `SeededRng` only | Deterministic replay for research |
 | Lifelong-only (not one-shot) | Fault resilience requires sustained operation |
-| 5 lifelong solvers (PIBT + 3 RHCR + Token Passing) | Only lifelong-capable solvers; one-shot solvers archived |
+| 8 lifelong solvers across 5 paradigms | Only lifelong-capable solvers; one-shot solvers archived. Reactive (PIBT, PIBT+APF), Windowed (3 RHCR), Config-Space (RT-LaCAM), Decentralized (TP, TPTS) |
 | Scheduler as research variable | Operators choose schedulers; more actionable than solver comparison |
 
 ---
