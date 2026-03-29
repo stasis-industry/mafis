@@ -5446,7 +5446,7 @@ body[data-phase="experiment"] #toolbar {
     border: 1px solid var(--border);
     border-radius: 0;
     cursor: pointer;
-    transition: all 100ms ease;
+    transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
     text-transform: uppercase;
 }
 
