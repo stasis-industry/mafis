@@ -63,9 +63,20 @@ impl QueueLine {
         })
     }
 
-    /// Back-of-line cell (where new agents aim to join).
+    /// Back-of-line cell (furthest from delivery).
     pub fn back_cell(&self) -> IVec2 {
         *self.cells.last().unwrap_or(&self.delivery_cell)
+    }
+
+    /// The cell a new agent should target: the first empty slot if known,
+    /// otherwise the back cell. When the queue is empty this returns `cells[0]`
+    /// (right next to delivery) instead of forcing agents to the far end.
+    pub fn join_cell(&self, state: &QueueState) -> IVec2 {
+        if let Some(slot_idx) = state.first_empty_slot() {
+            self.cells[slot_idx]
+        } else {
+            self.back_cell()
+        }
     }
 
     /// Queue capacity (number of waiting slots, excluding delivery cell itself).
@@ -177,8 +188,9 @@ impl DeliveryQueuePolicy for ClosestQueuePolicy {
             if state.is_full() {
                 continue;
             }
-            let dist = (agent_pos.x - line.back_cell().x).abs()
-                + (agent_pos.y - line.back_cell().y).abs();
+            let target = line.join_cell(state);
+            let dist = (agent_pos.x - target.x).abs()
+                + (agent_pos.y - target.y).abs();
             if best.is_none() || dist < best.unwrap().1 {
                 best = Some((i, dist));
             }
@@ -212,8 +224,9 @@ impl DeliveryQueuePolicy for LeastOccupiedPolicy {
                 continue;
             }
             let free = state.free_slots();
-            let dist = (agent_pos.x - line.back_cell().x).abs()
-                + (agent_pos.y - line.back_cell().y).abs();
+            let target = line.join_cell(state);
+            let dist = (agent_pos.x - target.x).abs()
+                + (agent_pos.y - target.y).abs();
             let is_better = match best {
                 None => true,
                 Some((_, best_free, best_dist)) => {
@@ -266,8 +279,9 @@ impl DeliveryQueuePolicy for WeightedQueuePolicy {
         let mut max_dist: f32 = 1.0;
         let mut max_occ: f32 = 1.0;
         for (line, state) in queue_lines.iter().zip(queue_states.iter()) {
-            let dist = ((agent_pos.x - line.back_cell().x).abs()
-                + (agent_pos.y - line.back_cell().y).abs()) as f32;
+            let target = line.join_cell(state);
+            let dist = ((agent_pos.x - target.x).abs()
+                + (agent_pos.y - target.y).abs()) as f32;
             let occ = state.occupancy() as f32;
             if dist > max_dist {
                 max_dist = dist;
@@ -283,8 +297,9 @@ impl DeliveryQueuePolicy for WeightedQueuePolicy {
             if state.is_full() {
                 continue;
             }
-            let dist = ((agent_pos.x - line.back_cell().x).abs()
-                + (agent_pos.y - line.back_cell().y).abs()) as f32;
+            let target = line.join_cell(state);
+            let dist = ((agent_pos.x - target.x).abs()
+                + (agent_pos.y - target.y).abs()) as f32;
             let occ = state.occupancy() as f32;
 
             let score = self.distance_weight * (dist / max_dist)
@@ -722,6 +737,7 @@ impl QueueManager {
             match decision {
                 QueueDecision::JoinQueue { line_index } => {
                     let line = &queue_lines[line_index];
+                    let state = &self.queues[line_index];
                     let from = match &agents[agent_idx].task_leg {
                         TaskLeg::Loading(pickup) => *pickup,
                         _ => agents[agent_idx].pos,
@@ -733,7 +749,7 @@ impl QueueManager {
                         to: line.delivery_cell,
                         line_index,
                     };
-                    agent.goal = line.back_cell();
+                    agent.goal = line.join_cell(state);
                     agent.planned_path.clear();
                     changed.push(agent_idx);
                 }
@@ -783,6 +799,7 @@ impl QueueManager {
             match decision {
                 QueueDecision::JoinQueue { line_index } => {
                     let new_line = &queue_lines[line_index];
+                    let new_state = &self.queues[line_index];
                     let from = match &agents[agent_idx].task_leg {
                         TaskLeg::TravelToQueue { from, .. }
                         | TaskLeg::Queuing { from, .. } => *from,
@@ -794,7 +811,7 @@ impl QueueManager {
                         to: new_line.delivery_cell,
                         line_index,
                     };
-                    agent.goal = new_line.back_cell();
+                    agent.goal = new_line.join_cell(new_state);
                     agent.planned_path.clear();
                     changed.push(agent_idx);
                 }
