@@ -18,7 +18,7 @@ seeded randomness ensures reproducible experiments for research.
 ## Documentation
 
 - [Live Simulator](https://stasis-website.vercel.app): Run simulations in your browser
-- [Source Code](https://github.com/stasis-industry/mafis): Full Rust source with 188+ tests
+- [Source Code](https://github.com/stasis-industries/mafis): Full Rust source with 188+ tests
 - [Map Maker](https://stasis-website.vercel.app/mapmaker.html): Visual topology editor for custom warehouse layouts
 - [Stasis Industry](https://stasis-website.vercel.app): Research organization behind MAFIS
 
