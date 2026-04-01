@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo/logo.png" width="400" alt="MAFIS">
+  <img src="assets/logo/logo.svg" width="400" alt="MAFIS">
   <br><br>
 
   [![CI](https://img.shields.io/github/actions/workflow/status/stasis-industries/mafis/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/stasis-industries/mafis/actions/workflows/ci.yml)
