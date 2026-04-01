@@ -9,12 +9,16 @@ use bevy::prelude::*;
 use crate::core::action::Action;
 use crate::core::seed::SeededRng;
 
-use super::astar::{FlatConstraintIndex, SpacetimeGrid, spacetime_astar_fast};
+use super::astar::{FlatCAT, FlatConstraintIndex, SpacetimeGrid, SeqGoalGrid,
+    spacetime_astar_fast, spacetime_astar_sequential};
+use super::heuristics::DistanceMap;
 use super::windowed::{PlanFragment, WindowContext, WindowResult, WindowedPlanner};
 
 pub struct PriorityAStarPlanner {
     ci: FlatConstraintIndex,
     stg: SpacetimeGrid,
+    seq_stg: SeqGoalGrid,
+    cat: FlatCAT,
 }
 
 impl Default for PriorityAStarPlanner {
@@ -28,6 +32,8 @@ impl PriorityAStarPlanner {
         Self {
             ci: FlatConstraintIndex::new(1, 1, 1),
             stg: SpacetimeGrid::new(),
+            seq_stg: SeqGoalGrid::new(),
+            cat: FlatCAT::new(1, 1, 1),
         }
     }
 }
@@ -57,24 +63,85 @@ impl WindowedPlanner for PriorityAStarPlanner {
         let mut all_plans: Vec<Option<Vec<Action>>> = vec![None; n];
         // Flat constraint index — zero-hashing O(1) lookups
         self.ci.reset(ctx.grid.width, ctx.grid.height, ctx.horizon as u64);
+        // CAT for soft-constraint tie-breaking (built incrementally)
+        self.cat.reset(ctx.grid.width, ctx.grid.height, ctx.horizon as u64);
+
+        // Collect which agents have been planned (warm-started or A*).
+        // Start constraints for unplanned agents are added per-agent below.
+        let mut planned = vec![false; n];
+
         let mut failed = Vec::new();
 
         for &i in &order {
             let agent = &ctx.agents[i];
 
-            match spacetime_astar_fast(
-                ctx.grid,
-                agent.pos,
-                agent.goal,
-                &self.ci,
-                ctx.horizon as u64,
-                Some(ctx.distance_maps[i]),
-                &mut self.stg,
-                u64::MAX,
-            ) {
+            // Warm-start: reuse previous plan if available
+            if let Some(ref init_plan) = ctx.initial_plans[i] {
+                add_plan_to_flat_index(&mut self.ci, init_plan, agent.pos, ctx.horizon);
+                self.cat.add_path(init_plan, agent.pos);
+                all_plans[i] = Some(init_plan.clone());
+                planned[i] = true;
+                continue;
+            }
+
+            // Add start constraints at t=0 for all OTHER unplanned agents.
+            // Planned agents already have their full trajectory in the CI.
+            // We add t=0 vertex constraints so this agent doesn't plan to be
+            // at an unplanned agent's position at t=0. The CI is additive so
+            // these are safe to accumulate (vertices already present are no-ops).
+            for (j, &(pos, time)) in ctx.start_constraints.iter().enumerate() {
+                if j != i && !planned[j] {
+                    self.ci.add_vertex(pos, time);
+                }
+            }
+
+            let result = if agent.goal_sequence.is_empty() {
+                spacetime_astar_fast(
+                    ctx.grid,
+                    agent.pos,
+                    agent.goal,
+                    &self.ci,
+                    ctx.horizon as u64,
+                    Some(ctx.distance_maps[i]),
+                    &mut self.stg,
+                    u64::MAX,
+                    Some(&self.cat),
+                )
+            } else {
+                let seq_dms: Vec<DistanceMap> = agent.goal_sequence.iter()
+                    .map(|&g| DistanceMap::compute(ctx.grid, g))
+                    .collect();
+                let mut goals: Vec<(IVec2, &DistanceMap)> = vec![(agent.goal, ctx.distance_maps[i])];
+                for (j, &g) in agent.goal_sequence.iter().enumerate() {
+                    goals.push((g, &seq_dms[j]));
+                }
+                // Try sequential A*; fall back progressively: drop trailing
+                // goals until we find a feasible subset, then single-goal.
+                let mut result = Err(super::traits::SolverError::NoSolution);
+                while goals.len() > 1 {
+                    result = spacetime_astar_sequential(
+                        ctx.grid, agent.pos, &goals, &self.ci,
+                        ctx.horizon as u64, &mut self.seq_stg, u64::MAX,
+                    );
+                    if result.is_ok() { break; }
+                    goals.pop();
+                }
+                if result.is_err() {
+                    result = spacetime_astar_fast(
+                        ctx.grid, agent.pos, agent.goal, &self.ci,
+                        ctx.horizon as u64, Some(ctx.distance_maps[i]),
+                        &mut self.stg, u64::MAX, Some(&self.cat),
+                    );
+                }
+                result
+            };
+
+            match result {
                 Ok(plan) => {
                     add_plan_to_flat_index(&mut self.ci, &plan, agent.pos, ctx.horizon);
+                    self.cat.add_path(&plan, agent.pos);
                     all_plans[i] = Some(plan);
+                    planned[i] = true;
                 }
                 Err(_) => {
                     failed.push(agent.index);
@@ -143,6 +210,9 @@ mod tests {
             node_limit: 0,
             agents: &agents,
             distance_maps: &dist_maps,
+            initial_plans: vec![None; agents.len()],
+            start_constraints: agents.iter().map(|a| (a.pos, 0u64)).collect(),
+            travel_penalties: &[],
         };
         let mut planner = PriorityAStarPlanner::new();
         let mut rng = SeededRng::new(42);
@@ -172,6 +242,9 @@ mod tests {
             node_limit: 0,
             agents: &agents,
             distance_maps: &dist_maps,
+            initial_plans: vec![None; agents.len()],
+            start_constraints: agents.iter().map(|a| (a.pos, 0u64)).collect(),
+            travel_penalties: &[],
         };
         let mut planner = PriorityAStarPlanner::new();
         let mut rng = SeededRng::new(42);

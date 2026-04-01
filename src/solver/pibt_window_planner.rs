@@ -27,6 +27,11 @@ impl PibtWindowPlanner {
             core: PibtCore::new(),
         }
     }
+
+    #[cfg(test)]
+    pub(crate) fn priorities(&self) -> &[f32] {
+        self.core.priorities()
+    }
 }
 
 impl WindowedPlanner for PibtWindowPlanner {
@@ -48,8 +53,9 @@ impl WindowedPlanner for PibtWindowPlanner {
         let goals: Vec<IVec2> = ctx.agents.iter().map(|a| a.goal).collect();
         let mut plans: Vec<Vec<Action>> = vec![Vec::with_capacity(ctx.horizon); n];
 
-        // Reset core priorities for fresh window
-        self.core.reset();
+        // Do NOT reset priorities here — they must accumulate across windows
+        // to prevent starvation. PibtCore::one_step() reinitializes when
+        // agent count changes (priorities.len() != n), which is sufficient.
 
         // Unroll PIBT for H steps
         for _t in 0..ctx.horizon {
@@ -97,6 +103,18 @@ impl WindowedPlanner for PibtWindowPlanner {
             WindowResult::Partial { solved, failed }
         }
     }
+
+    fn reset(&mut self) {
+        self.core.reset();
+    }
+
+    fn save_priorities(&self) -> Vec<f32> {
+        self.core.priorities().to_vec()
+    }
+
+    fn restore_priorities(&mut self, priorities: &[f32]) {
+        self.core.set_priorities(priorities);
+    }
 }
 
 #[cfg(test)]
@@ -120,6 +138,9 @@ mod tests {
             node_limit: 0,
             agents: &agents,
             distance_maps: &dist_maps,
+            initial_plans: vec![None; agents.len()],
+            start_constraints: agents.iter().map(|a| (a.pos, 0u64)).collect(),
+            travel_penalties: &[],
         };
         let mut planner = PibtWindowPlanner::new();
         let mut rng = SeededRng::new(42);
@@ -132,5 +153,41 @@ mod tests {
             }
             _ => panic!("expected Solved"),
         }
+    }
+
+    #[test]
+    fn pibt_window_priorities_persist_across_windows() {
+        let grid = GridMap::new(5, 5);
+        let agents = vec![
+            WindowAgent { index: 0, pos: IVec2::new(0, 0), goal: IVec2::new(4, 4), goal_sequence: SmallVec::new() },
+            WindowAgent { index: 1, pos: IVec2::new(0, 1), goal: IVec2::new(4, 3), goal_sequence: SmallVec::new() },
+        ];
+        let dm0 = DistanceMap::compute(&grid, IVec2::new(4, 4));
+        let dm1 = DistanceMap::compute(&grid, IVec2::new(4, 3));
+        let dist_maps: Vec<&DistanceMap> = vec![&dm0, &dm1];
+        let ctx = super::super::windowed::WindowContext {
+            grid: &grid,
+            horizon: 5,
+            node_limit: 0,
+            agents: &agents,
+            distance_maps: &dist_maps,
+            initial_plans: vec![None; agents.len()],
+            start_constraints: agents.iter().map(|a| (a.pos, 0u64)).collect(),
+            travel_penalties: &[],
+        };
+        let mut planner = PibtWindowPlanner::new();
+        let mut rng = SeededRng::new(42);
+
+        planner.plan_window(&ctx, &mut rng);
+        let priorities_after_w1 = planner.priorities().to_vec();
+
+        planner.plan_window(&ctx, &mut rng);
+        let priorities_after_w2 = planner.priorities().to_vec();
+
+        // Priorities should accumulate across windows, not reset to zero
+        assert_ne!(priorities_after_w2, vec![0.0; 2],
+            "Priorities should accumulate across windows, not reset to zero");
+        assert_ne!(priorities_after_w1, priorities_after_w2,
+            "Priorities should change between windows");
     }
 }

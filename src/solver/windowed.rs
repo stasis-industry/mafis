@@ -24,6 +24,17 @@ pub struct WindowContext<'a> {
     pub agents: &'a [WindowAgent],
     /// Pre-computed distance maps aligned with `agents`.
     pub distance_maps: &'a [&'a DistanceMap],
+    /// Warm-start initial plans from previous replan (agent-aligned).
+    /// `initial_plans[local_idx] = Some(tail_plan)` if the previous plan is
+    /// still valid for that agent, `None` otherwise.
+    pub initial_plans: Vec<Option<Vec<Action>>>,
+    /// Vertex constraints at t=0 for all agents' start positions.
+    /// Prevents agent A from planning to be at agent B's position at t=0.
+    pub start_constraints: Vec<(IVec2, u64)>,
+    /// Per-cell travel penalties (grid-aligned flat array, indexed by y*width+x).
+    /// Higher values indicate historically congested cells. Planners may use
+    /// this as an additive cost bias. Empty slice = no penalties.
+    pub travel_penalties: &'a [f32],
 }
 
 #[derive(Clone, Debug)]
@@ -68,4 +79,16 @@ pub trait WindowedPlanner: Send + Sync {
         ctx: &WindowContext,
         rng: &mut SeededRng,
     ) -> WindowResult;
+
+    /// Reset all internal state (for rewind/scenario change).
+    /// Default: no-op.
+    fn reset(&mut self) {}
+
+    /// Save internal priority state for deterministic rewind.
+    /// Default: no state to save.
+    fn save_priorities(&self) -> Vec<f32> { Vec::new() }
+
+    /// Restore priorities from a snapshot.
+    /// Default: no-op.
+    fn restore_priorities(&mut self, _priorities: &[f32]) {}
 }

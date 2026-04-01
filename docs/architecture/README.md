@@ -224,7 +224,7 @@ src/
   lib.rs           MapfFisPlugin + wasm_bindgen exports
   constants.rs     All tunable limits + VERSION constant
   core/            Tick loop, agents, grid, state machine, task scheduling, topology
-  solver/          8 lifelong solvers + shared heuristics + A*
+  solver/          7 lifelong solvers + shared heuristics + A*
   fault/           Heat/wear accumulation, fault detection, replanning
   analysis/        ADG, cascade BFS, metrics, heatmap, scorecard
   render/          Environment, robot visuals, orbit camera, picking/hover (WASM only)

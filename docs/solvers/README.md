@@ -1,8 +1,8 @@
 # Solvers
 
-How agents find paths in MAFIS — 8 lifelong solvers across 5 paradigms.
+How agents find paths in MAFIS — 7 lifelong solvers across 4 paradigms.
 
-All solvers are **lifelong**: they run continuously, replanning as agents complete tasks and receive new goals. One-shot solvers (CBS, LaCAM, PBS, LNS2) are archived on the `archive/one-shot-solvers` branch and are not part of the active codebase.
+All solvers are **lifelong**: they run continuously, replanning as agents complete tasks and receive new goals. One-shot solvers (CBS, LaCAM, PBS, LNS2) are not part of the active codebase.
 
 ---
 
@@ -14,7 +14,6 @@ graph TD
 
     subgraph Reactive ["Reactive"]
         PIBT["PIBT"]
-        APF["PIBT+APF"]
     end
 
     subgraph Windowed ["Windowed (RHCR)"]
@@ -33,7 +32,6 @@ graph TD
     end
 
     LS --> PIBT
-    LS --> APF
     LS --> PBS
     LS --> PW
     LS --> PA
@@ -45,7 +43,6 @@ graph TD
 | Solver | ID | Paradigm | Replans | Best for |
 |--------|----|----------|---------|----------|
 | PIBT | `pibt` | Reactive | Every tick | High density, fast response |
-| PIBT+APF | `pibt+apf` | Meta + Reactive | Every tick | Reducing congestion via potential fields |
 | RHCR (PBS) | `rhcr_pbs` | Windowed | Every W ticks | Moderate density, quality plans |
 | RHCR (PIBT-Window) | `rhcr_pibt` | Windowed | Every W ticks | Fast cooperative windowed planning |
 | RHCR (Priority A*) | `rhcr_priority_astar` | Windowed | Every W ticks | Moderate density, sequential planning |
@@ -77,14 +74,6 @@ The ECS calls `step()` every tick. The solver returns either `StepResult::Replan
 The simplest solver. Every tick, each agent tries to move one step toward its goal. If two agents collide, the lower-priority one yields. Priorities rotate so no agent starves.
 
 PIBT is also the **fallback** for other solvers — when RHCR or RT-LaCAM can't find a plan, they fall back to one step of PIBT.
-
-### PIBT+APF (Artificial Potential Fields)
-
-PIBT with an added repulsion layer. After each agent commits to a move during PIBT recursion, it projects a short future path and adds an artificial potential field that repels other agents. This reduces congestion in bottlenecks.
-
-Key: the APF is updated **sequentially inside PIBT recursion** (not pre-computed), which is why it can't use the generic `GuidanceLayer` wrapper.
-
-Formula: `w * gamma^(-dist)` for Manhattan distance up to `d_max`. Goal cells always return bias 0.
 
 ### RHCR (Rolling-Horizon Collision Resolution)
 
@@ -143,7 +132,6 @@ graph LR
     AS["spacetime A*\n(astar.rs)"]
 
     PIBT_S["PIBT"] --> PC
-    APF_S["PIBT+APF"] --> PC
     PW_S["RHCR PIBT-Window"] --> PC
     RTL_S["RT-LaCAM"] --> PC
 
@@ -155,7 +143,6 @@ graph LR
     PA_S["RHCR Priority A*"] --> AS
 
     PIBT_S --> HE
-    APF_S --> HE
     RTL_S --> HE
     TP_S --> HE
     TPTS_S --> HE
@@ -164,11 +151,11 @@ graph LR
     PBS_S["RHCR PBS"] --> HE
 ```
 
-- **PibtCore** (`pibt_core.rs`): the shared PIBT algorithm used by standalone PIBT, PIBT+APF, PIBT-Window, RHCR fallback, and RT-LaCAM's configuration generator.
+- **PibtCore** (`pibt_core.rs`): the shared PIBT algorithm used by standalone PIBT, PIBT-Window, RHCR fallback, and RT-LaCAM's configuration generator.
 - **token_common** (`token_common.rs`): `Token` (path store for all agents) and `MasterConstraintIndex` (reference-counted constraints) shared by Token Passing and TPTS.
 - **DistanceMapCache** (`heuristics.rs`): cached BFS distance maps from goal cells. All solvers use this for heuristic guidance.
 - **spacetime A*** (`astar.rs`): used by Token Passing, TPTS, Priority A*, and PBS for individual agent pathfinding in (x, y, t) space.
-- **GuidanceLayer** (`guidance.rs`): trait for pre-computed cell biases + `GuidedSolver` wrapper. Designed for static meta-layers (like GGO). NOT used by PIBT+APF, which needs sequential in-recursion updates.
+- **GuidanceLayer** (`guidance.rs`): trait for pre-computed cell biases + `GuidedSolver` wrapper. Designed for static meta-layers (like GGO).
 
 ---
 
@@ -188,7 +175,6 @@ flowchart TD
     Medium --> Q2["Priority: speed or plan quality?"]
     Q2 -->|Speed| PIBT_R["PIBT"]
     Q2 -->|Quality| RHCR_R["RHCR (PIBT-Window)"]
-    Q2 -->|Congestion| APF_R["PIBT+APF"]
 
     Large --> Q3["Memory budget?"]
     Q3 -->|Low| PIBT_R2["PIBT"]
@@ -201,11 +187,11 @@ This is a rough guide — the best solver depends on topology, fault scenario, a
 
 ## Fidelity
 
-All 8 solvers are documented in [`docs/solver_fidelity.md`](../solver_fidelity.md) with:
+All 7 solvers are documented in [`docs/solver_fidelity.md`](../solver_fidelity.md) with:
 - Paper references (author, year, venue)
 - Requirement matrices (which aspects match the paper, which deviate)
 - Fixes applied and remaining deviations
 
-Three solvers (PIBT+APF, TPTS, RT-LaCAM) were line-audited against their papers. The remaining five (PIBT, 3 RHCR, Token Passing) are property-verified: collision-freedom, determinism, throughput saturation, and metamorphic properties are tested, but no line-by-line pseudocode comparison was done.
+Two solvers (TPTS, RT-LaCAM) were line-audited against their papers. The remaining five (PIBT, 3 RHCR, Token Passing) are property-verified: collision-freedom, determinism, throughput saturation, and metamorphic properties are tested, but no line-by-line pseudocode comparison was done.
 
-All 8 pass: collision-free verification (500 ticks), deterministic replay, rewind determinism, and scale testing up to 300 agents.
+All 7 pass: collision-free verification (500 ticks), deterministic replay, rewind determinism, and scale testing up to 300 agents.
