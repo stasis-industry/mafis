@@ -138,6 +138,8 @@ mod tests {
             node_limit: 0,
             agents: &agents,
             distance_maps: &dist_maps,
+            initial_plans: vec![None; agents.len()],
+            start_constraints: agents.iter().map(|a| (a.pos, 0u64)).collect(),
         };
         let mut planner = PibtWindowPlanner::new();
         let mut rng = SeededRng::new(42);
@@ -168,6 +170,8 @@ mod tests {
             node_limit: 0,
             agents: &agents,
             distance_maps: &dist_maps,
+            initial_plans: vec![None; agents.len()],
+            start_constraints: agents.iter().map(|a| (a.pos, 0u64)).collect(),
         };
         let mut planner = PibtWindowPlanner::new();
         let mut rng = SeededRng::new(42);

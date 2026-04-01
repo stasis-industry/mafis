@@ -61,10 +61,34 @@ impl WindowedPlanner for PriorityAStarPlanner {
         let mut all_plans: Vec<Option<Vec<Action>>> = vec![None; n];
         // Flat constraint index — zero-hashing O(1) lookups
         self.ci.reset(ctx.grid.width, ctx.grid.height, ctx.horizon as u64);
+
+        // Collect which agents have been planned (warm-started or A*).
+        // Start constraints for unplanned agents are added per-agent below.
+        let mut planned = vec![false; n];
+
         let mut failed = Vec::new();
 
         for &i in &order {
             let agent = &ctx.agents[i];
+
+            // Warm-start: reuse previous plan if available
+            if let Some(ref init_plan) = ctx.initial_plans[i] {
+                add_plan_to_flat_index(&mut self.ci, init_plan, agent.pos, ctx.horizon);
+                all_plans[i] = Some(init_plan.clone());
+                planned[i] = true;
+                continue;
+            }
+
+            // Add start constraints at t=0 for all OTHER unplanned agents.
+            // Planned agents already have their full trajectory in the CI.
+            // We add t=0 vertex constraints so this agent doesn't plan to be
+            // at an unplanned agent's position at t=0. The CI is additive so
+            // these are safe to accumulate (vertices already present are no-ops).
+            for (j, &(pos, time)) in ctx.start_constraints.iter().enumerate() {
+                if j != i && !planned[j] {
+                    self.ci.add_vertex(pos, time);
+                }
+            }
 
             let result = if agent.goal_sequence.is_empty() {
                 spacetime_astar_fast(
@@ -110,6 +134,7 @@ impl WindowedPlanner for PriorityAStarPlanner {
                 Ok(plan) => {
                     add_plan_to_flat_index(&mut self.ci, &plan, agent.pos, ctx.horizon);
                     all_plans[i] = Some(plan);
+                    planned[i] = true;
                 }
                 Err(_) => {
                     failed.push(agent.index);
@@ -178,6 +203,8 @@ mod tests {
             node_limit: 0,
             agents: &agents,
             distance_maps: &dist_maps,
+            initial_plans: vec![None; agents.len()],
+            start_constraints: agents.iter().map(|a| (a.pos, 0u64)).collect(),
         };
         let mut planner = PriorityAStarPlanner::new();
         let mut rng = SeededRng::new(42);
@@ -207,6 +234,8 @@ mod tests {
             node_limit: 0,
             agents: &agents,
             distance_maps: &dist_maps,
+            initial_plans: vec![None; agents.len()],
+            start_constraints: agents.iter().map(|a| (a.pos, 0u64)).collect(),
         };
         let mut planner = PriorityAStarPlanner::new();
         let mut rng = SeededRng::new(42);

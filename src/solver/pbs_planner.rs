@@ -251,11 +251,19 @@ fn plan_agent(
     dist_map: Option<&DistanceMap>,
     ci_buf: &mut FlatConstraintIndex,
     stg: &mut SpacetimeGrid,
+    start_constraints: &[(IVec2, u64)],
 ) -> Option<Vec<Action>> {
     let agent = &agents[agent_idx];
 
     // Build flat constraint index for this agent
     ci_buf.reset(grid.width, grid.height, horizon as u64);
+
+    // Add start constraints for OTHER agents at t=0
+    for (j, &(pos, time)) in start_constraints.iter().enumerate() {
+        if j != agent_idx {
+            ci_buf.add_vertex(pos, time);
+        }
+    }
 
     for &(higher, lower) in priority_pairs {
         if lower == agent_idx {
@@ -337,13 +345,21 @@ impl WindowedPlanner for PbsPlanner {
         let cells = (ctx.grid.width * ctx.grid.height) as usize;
         self.conflict_grid.ensure_size(cells);
 
-        // Initial plans: each agent plans independently.
-        // Agents with goal sequences use sequential A*; others use BFS-guided A*.
+        // Initial plans: warm-start from previous plans when available,
+        // otherwise plan independently. Matches reference PBS::generate_root_node()
+        // which skips low-level search for agents with non-empty initial paths.
         let mut initial_plans: Vec<Vec<Action>> = Vec::with_capacity(n);
 
         self.empty_ci.reset(ctx.grid.width, ctx.grid.height, ctx.horizon as u64);
 
         for i in 0..n {
+            // Warm-start: reuse previous plan if available
+            if let Some(ref init_plan) = ctx.initial_plans[i] {
+                initial_plans.push(init_plan.clone());
+                continue;
+            }
+
+            // Plan from scratch (independent — PBS tree search handles conflicts)
             let agent = &ctx.agents[i];
             let plan = if agent.goal_sequence.is_empty() {
                 spacetime_astar_guided(
@@ -437,11 +453,13 @@ impl WindowedPlanner for PbsPlanner {
                     &node, conflict.agent_a, conflict.agent_b,
                     ctx.agents, ctx.grid, ctx.horizon, ctx.distance_maps,
                     &mut self.ci_buf, &mut self.stg,
+                    &ctx.start_constraints,
                 );
                 let child2 = try_branch(
                     &node, conflict.agent_b, conflict.agent_a,
                     ctx.agents, ctx.grid, ctx.horizon, ctx.distance_maps,
                     &mut self.ci_buf, &mut self.stg,
+                    &ctx.start_constraints,
                 );
 
                 // Push worse child first, better child second (better popped first in DFS)
@@ -514,6 +532,7 @@ fn try_branch(
     distance_maps: &[&DistanceMap],
     ci_buf: &mut FlatConstraintIndex,
     stg: &mut SpacetimeGrid,
+    start_constraints: &[(IVec2, u64)],
 ) -> Option<PbsNode> {
     if would_create_cycle(&parent.priority_pairs, higher, lower) {
         return None;
@@ -525,7 +544,7 @@ fn try_branch(
     let mut new_plans = parent.plans.clone();
 
     let dm = distance_maps.get(lower).copied();
-    if let Some(new_plan) = plan_agent(lower, agents, &new_plans, &new_pairs, grid, horizon, dm, ci_buf, stg) {
+    if let Some(new_plan) = plan_agent(lower, agents, &new_plans, &new_pairs, grid, horizon, dm, ci_buf, stg, start_constraints) {
         new_plans[lower] = new_plan;
         let mut new_timelines = parent.timelines.clone();
         rebuild_timeline(&mut new_timelines, &new_plans, agents, lower);
@@ -595,6 +614,8 @@ mod tests {
             node_limit: 500,
             agents,
             distance_maps: dist_maps,
+            initial_plans: vec![None; agents.len()],
+            start_constraints: agents.iter().map(|a| (a.pos, 0u64)).collect(),
         }
     }
 
@@ -724,6 +745,8 @@ mod tests {
             node_limit: 6,
             agents: &agents,
             distance_maps: &dist_maps,
+            initial_plans: vec![None; agents.len()],
+            start_constraints: agents.iter().map(|a| (a.pos, 0u64)).collect(),
         };
         let mut planner = PbsPlanner::new();
         let mut rng = SeededRng::new(42);

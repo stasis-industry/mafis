@@ -24,6 +24,13 @@ pub struct WindowContext<'a> {
     pub agents: &'a [WindowAgent],
     /// Pre-computed distance maps aligned with `agents`.
     pub distance_maps: &'a [&'a DistanceMap],
+    /// Warm-start initial plans from previous replan (agent-aligned).
+    /// `initial_plans[local_idx] = Some(tail_plan)` if the previous plan is
+    /// still valid for that agent, `None` otherwise.
+    pub initial_plans: Vec<Option<Vec<Action>>>,
+    /// Vertex constraints at t=0 for all agents' start positions.
+    /// Prevents agent A from planning to be at agent B's position at t=0.
+    pub start_constraints: Vec<(IVec2, u64)>,
 }
 
 #[derive(Clone, Debug)]
