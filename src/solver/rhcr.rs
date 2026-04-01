@@ -293,6 +293,155 @@ impl RhcrSolver {
         }
     }
 
+    /// LRA-style conflict resolution: takes a set of multi-step plans (possibly
+    /// with conflicts) and resolves them by inserting Wait actions for
+    /// lower-priority agents. Processes timestep by timestep. When two agents
+    /// would collide, the lower-indexed agent waits. This preserves overall plan
+    /// structure while eliminating collisions.
+    ///
+    /// Returns resolved plans as `Vec<AgentPlan>`.
+    /// Priority rule: agents earlier in `plans` = higher priority (keep their
+    /// planned action). This matches MAFIS convention where lower agent index
+    /// means higher priority.
+    fn lra_resolve_conflicts(
+        plans: &[(usize, Vec<Action>)],
+        agents: &[AgentState],
+        _grid: &GridMap,
+        max_steps: usize,
+    ) -> Vec<AgentPlan> {
+        use smallvec::SmallVec;
+
+        let n = plans.len();
+        if n == 0 {
+            return Vec::new();
+        }
+
+        // Current position per slot (initialized from AgentState)
+        let mut cur_pos: Vec<IVec2> = plans
+            .iter()
+            .map(|(idx, _)| {
+                agents
+                    .iter()
+                    .find(|a| a.index == *idx)
+                    .map(|a| a.pos)
+                    .unwrap_or(IVec2::ZERO)
+            })
+            .collect();
+
+        // Cursor into each agent's original plan (how far we've consumed)
+        let mut cursors: Vec<usize> = vec![0; n];
+
+        // Resolved actions per slot
+        let mut resolved: Vec<SmallVec<[Action; 20]>> = vec![SmallVec::new(); n];
+
+        for _t in 0..max_steps {
+            // Phase 1: compute intended next position for each slot
+            let mut intended_action: Vec<Action> = Vec::with_capacity(n);
+            let mut intended_pos: Vec<IVec2> = Vec::with_capacity(n);
+
+            for slot in 0..n {
+                let (_, ref plan) = plans[slot];
+                let action = if cursors[slot] < plan.len() {
+                    plan[cursors[slot]]
+                } else {
+                    Action::Wait
+                };
+                intended_action.push(action);
+                intended_pos.push(action.apply(cur_pos[slot]));
+            }
+
+            // Phase 2: detect conflicts and force lower-priority agents to Wait.
+            // We iterate in priority order (slot 0 = highest priority). An agent
+            // forced to Wait does NOT advance its cursor.
+            let mut forced_wait = vec![false; n];
+
+            // Vertex conflicts: two agents want to occupy the same cell at t+1.
+            // The lower-priority one (higher slot index) waits.
+            for hi in 0..n {
+                if forced_wait[hi] {
+                    continue;
+                }
+                for lo in (hi + 1)..n {
+                    if forced_wait[lo] {
+                        continue;
+                    }
+                    if intended_pos[hi] == intended_pos[lo] {
+                        // lo has lower priority -> force wait
+                        forced_wait[lo] = true;
+                        intended_action[lo] = Action::Wait;
+                        intended_pos[lo] = cur_pos[lo]; // stay put
+                    }
+                }
+            }
+
+            // Edge conflicts (swaps): agent A moves to B's old cell while B moves
+            // to A's old cell. Force the lower-priority one to Wait.
+            for hi in 0..n {
+                if forced_wait[hi] {
+                    continue;
+                }
+                for lo in (hi + 1)..n {
+                    if forced_wait[lo] {
+                        continue;
+                    }
+                    let swapped = intended_pos[hi] == cur_pos[lo]
+                        && intended_pos[lo] == cur_pos[hi]
+                        && intended_pos[hi] != cur_pos[hi]; // actual movement
+                    if swapped {
+                        forced_wait[lo] = true;
+                        intended_action[lo] = Action::Wait;
+                        intended_pos[lo] = cur_pos[lo];
+                    }
+                }
+            }
+
+            // After forcing waits, re-check for NEW vertex conflicts caused by
+            // a waited agent now staying at a cell that another agent moves into.
+            // We do a second pass in priority order.
+            for hi in 0..n {
+                for lo in (hi + 1)..n {
+                    if forced_wait[lo] {
+                        // lo is already waiting — check if hi is moving INTO lo's
+                        // current position (which lo is now staying at)
+                        if !forced_wait[hi] && intended_pos[hi] == intended_pos[lo] {
+                            forced_wait[hi] = true;
+                            intended_action[hi] = Action::Wait;
+                            intended_pos[hi] = cur_pos[hi];
+                        }
+                    }
+                }
+            }
+
+            // Phase 3: commit actions, advance cursors for non-waited agents
+            for slot in 0..n {
+                resolved[slot].push(intended_action[slot]);
+                cur_pos[slot] = intended_pos[slot];
+                if !forced_wait[slot] && cursors[slot] < plans[slot].1.len() {
+                    cursors[slot] += 1;
+                }
+            }
+
+            // Early exit: all cursors exhausted
+            if cursors.iter().enumerate().all(|(s, &c)| c >= plans[s].1.len()) {
+                break;
+            }
+        }
+
+        // Build output: trim trailing Waits for compactness
+        plans
+            .iter()
+            .enumerate()
+            .map(|(slot, (idx, _))| {
+                let mut actions = std::mem::take(&mut resolved[slot]);
+                // Trim trailing Waits (but keep at least one action)
+                while actions.len() > 1 && actions.last() == Some(&Action::Wait) {
+                    actions.pop();
+                }
+                (*idx, actions)
+            })
+            .collect()
+    }
+
     /// Apply PIBT fallback to a set of agent indices.
     /// `solved_first_steps` contains (agent_index, next_step_target) for
     /// agents whose plans were kept — PIBT must not collide with them.
@@ -547,45 +696,39 @@ impl LifelongSolver for RhcrSolver {
                 }
             }
             WindowResult::Partial { solved, failed } => {
-                // Compute first-step targets for solved agents (used by PIBT fallback).
-                // Agents with empty plans are already at their goal and stay in place —
-                // include their current position so the fallback doesn't move into it.
-                let solved_first_steps: Vec<(usize, IVec2)> = solved
-                    .iter()
-                    .filter_map(|frag| {
-                        let agent = agents.iter().find(|a| a.index == frag.agent_index)?;
-                        let target = frag.actions.first()
-                            .map(|action| action.apply(agent.pos))
-                            .unwrap_or(agent.pos); // empty plan → stays in place
-                        Some((frag.agent_index, target))
-                    })
-                    .collect();
-
                 match self.config.fallback {
-                    FallbackMode::PerAgent => {
-                        // Keep solved plans
-                        for frag in solved {
-                            self.plan_buffer.push((frag.agent_index, frag.actions));
-                        }
-                        // PIBT fallback for failed (aware of solved agents' first steps)
-                        self.pibt_fallback_for(
-                            &failed, agents, distance_cache, ctx.grid, &solved_first_steps,
+                    FallbackMode::PerAgent | FallbackMode::Tiered => {
+                        // LRA conflict resolution: combine solved multi-step plans
+                        // with single-Wait stubs for failed agents, then resolve
+                        // conflicts timestep-by-timestep. This preserves plan
+                        // structure (unlike PIBT fallback which discards everything).
+                        let mut combined: Vec<(usize, Vec<Action>)> = Vec::with_capacity(
+                            solved.len() + failed.len(),
                         );
+                        for frag in &solved {
+                            combined.push((frag.agent_index, frag.actions.to_vec()));
+                        }
+                        // Failed agents get single Wait as their "plan"
+                        for &idx in &failed {
+                            combined.push((idx, vec![Action::Wait]));
+                        }
+
+                        let resolved = Self::lra_resolve_conflicts(
+                            &combined,
+                            agents,
+                            ctx.grid,
+                            self.config.horizon,
+                        );
+
+                        for (idx, actions) in resolved {
+                            self.plan_buffer.push((idx, actions));
+                        }
                     }
                     FallbackMode::Full => {
                         // Discard all windowed plans, PIBT everyone
                         let all_indices: Vec<usize> = agents.iter().map(|a| a.index).collect();
                         self.pibt_fallback_for(
                             &all_indices, agents, distance_cache, ctx.grid, &[],
-                        );
-                    }
-                    FallbackMode::Tiered => {
-                        // Keep solved plans, PIBT the rest
-                        for frag in solved {
-                            self.plan_buffer.push((frag.agent_index, frag.actions));
-                        }
-                        self.pibt_fallback_for(
-                            &failed, agents, distance_cache, ctx.grid, &solved_first_steps,
                         );
                     }
                 }
@@ -1197,5 +1340,75 @@ mod tests {
         // Warm-started plans should be at least as good (plans exist)
         assert!(len1 > 0, "First replan should produce plans");
         assert!(len2 > 0, "Second replan (warm-started) should produce plans");
+    }
+
+    #[test]
+    fn lra_resolves_vertex_conflict() {
+        use crate::core::action::Direction;
+
+        let grid = GridMap::new(5, 5);
+        // Two agents both want to go to (2,0) at t=1
+        let plans: Vec<(usize, Vec<Action>)> = vec![
+            (0, vec![Action::Move(Direction::East), Action::Move(Direction::East)]),
+            (1, vec![Action::Move(Direction::West), Action::Move(Direction::West)]),
+        ];
+        let agents = vec![
+            AgentState { index: 0, pos: IVec2::new(1, 0), goal: Some(IVec2::new(3, 0)), has_plan: true, task_leg: TaskLeg::Free },
+            AgentState { index: 1, pos: IVec2::new(3, 0), goal: Some(IVec2::new(1, 0)), has_plan: true, task_leg: TaskLeg::Free },
+        ];
+
+        let resolved = RhcrSolver::lra_resolve_conflicts(&plans, &agents, &grid, 4);
+
+        // Both should have plans
+        assert_eq!(resolved.len(), 2);
+
+        // Simulate and verify no vertex conflicts
+        let mut pos0 = agents[0].pos;
+        let mut pos1 = agents[1].pos;
+        let plan0 = &resolved.iter().find(|(i, _)| *i == 0).unwrap().1;
+        let plan1 = &resolved.iter().find(|(i, _)| *i == 1).unwrap().1;
+        let max_len = plan0.len().max(plan1.len());
+        for t in 0..max_len {
+            let a0 = plan0.get(t).copied().unwrap_or(Action::Wait);
+            let a1 = plan1.get(t).copied().unwrap_or(Action::Wait);
+            pos0 = a0.apply(pos0);
+            pos1 = a1.apply(pos1);
+            assert_ne!(pos0, pos1, "vertex conflict at t={}", t + 1);
+        }
+    }
+
+    #[test]
+    fn lra_resolves_edge_conflict() {
+        use crate::core::action::Direction;
+
+        let grid = GridMap::new(5, 5);
+        // Two agents trying to swap positions
+        let plans: Vec<(usize, Vec<Action>)> = vec![
+            (0, vec![Action::Move(Direction::East)]),
+            (1, vec![Action::Move(Direction::West)]),
+        ];
+        let agents = vec![
+            AgentState { index: 0, pos: IVec2::new(1, 0), goal: Some(IVec2::new(2, 0)), has_plan: true, task_leg: TaskLeg::Free },
+            AgentState { index: 1, pos: IVec2::new(2, 0), goal: Some(IVec2::new(1, 0)), has_plan: true, task_leg: TaskLeg::Free },
+        ];
+
+        let resolved = RhcrSolver::lra_resolve_conflicts(&plans, &agents, &grid, 4);
+
+        // Simulate: no swap conflict
+        let mut pos0 = agents[0].pos;
+        let mut pos1 = agents[1].pos;
+        let plan0 = &resolved.iter().find(|(i, _)| *i == 0).unwrap().1;
+        let plan1 = &resolved.iter().find(|(i, _)| *i == 1).unwrap().1;
+        for t in 0..plan0.len().max(plan1.len()) {
+            let prev0 = pos0;
+            let prev1 = pos1;
+            let a0 = plan0.get(t).copied().unwrap_or(Action::Wait);
+            let a1 = plan1.get(t).copied().unwrap_or(Action::Wait);
+            pos0 = a0.apply(pos0);
+            pos1 = a1.apply(pos1);
+            // No swap: agent 0 didn't go to agent 1's old pos while agent 1 went to agent 0's old pos
+            let swapped = pos0 == prev1 && pos1 == prev0 && pos0 != prev0;
+            assert!(!swapped, "edge conflict (swap) at t={}", t + 1);
+        }
     }
 }
