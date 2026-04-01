@@ -15,7 +15,7 @@ const NUM_AGENTS: usize = 15;
 
 const SOLVERS: &[&str] = &[
     "pibt", "rhcr_pibt", "rhcr_pbs", "rhcr_priority_astar",
-    "token_passing", "rt_lacam", "tpts", "pibt+apf",
+    "token_passing", "rt_lacam", "tpts",
 ];
 
 // ═══════════════════════════════════════════════════════════════════════

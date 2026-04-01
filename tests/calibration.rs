@@ -164,7 +164,7 @@ fn property_solver_paradigm_consistency() {
 
     let solvers = [
         "pibt", "rhcr_pibt", "rhcr_priority_astar", "rhcr_pbs",
-        "token_passing", "rt_lacam", "tpts", "pibt+apf",
+        "token_passing", "rt_lacam", "tpts",
     ];
 
     let mut results = Vec::new();
