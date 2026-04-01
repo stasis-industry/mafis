@@ -8,6 +8,7 @@
 //! Warehouses" (AAAI 2021).
 
 use bevy::prelude::*;
+use rand::Rng;
 use smallvec::smallvec;
 
 use crate::constants;
@@ -15,7 +16,7 @@ use crate::core::action::Action;
 use crate::core::grid::GridMap;
 use crate::core::seed::SeededRng;
 
-use super::heuristics::DistanceMapCache;
+use super::heuristics::{manhattan, DistanceMapCache};
 use super::lifelong::{AgentPlan, AgentState, LifelongSolver, SolverContext, StepResult};
 use super::pibt_core::PibtCore;
 use super::traits::{Optimality, Scalability, SolverInfo};
@@ -198,6 +199,47 @@ impl RhcrSolver {
 
     pub fn config(&self) -> &RhcrConfig {
         &self.config
+    }
+
+    /// Fill goal sequences for agents whose primary goal is reachable within the
+    /// planning horizon. Appends random zone endpoints until cumulative distance
+    /// reaches the horizon. Reference: KivaSystem::update_goal_locations() in RHCR C++.
+    fn fill_goal_sequences(
+        agents: &mut [WindowAgent],
+        dist_maps: &[&super::heuristics::DistanceMap],
+        zones: &crate::core::topology::ZoneMap,
+        horizon: usize,
+        rng: &mut SeededRng,
+    ) {
+        let endpoints: Vec<IVec2> = zones.pickup_cells.iter()
+            .chain(zones.delivery_cells.iter())
+            .copied()
+            .collect();
+        if endpoints.is_empty() { return; }
+
+        for (i, agent) in agents.iter_mut().enumerate() {
+            let dist_to_goal = dist_maps[i].get(agent.pos);
+            if dist_to_goal >= horizon as u64 { continue; }
+
+            let mut cumulative = dist_to_goal;
+            let mut last_goal = agent.goal;
+            let max_seq = 4;
+            let mut attempts = 0;
+            while cumulative < horizon as u64 && agent.goal_sequence.len() < max_seq {
+                let idx = rng.rng.random_range(0..endpoints.len());
+                let next = endpoints[idx];
+                if next == last_goal {
+                    attempts += 1;
+                    if attempts > 10 { break; }
+                    continue;
+                }
+                attempts = 0;
+                let leg_dist = manhattan(last_goal, next);
+                cumulative += leg_dist;
+                agent.goal_sequence.push(next);
+                last_goal = next;
+            }
+        }
     }
 
     /// Check congestion: returns true if >50% of agents didn't move since last tick.
@@ -407,7 +449,7 @@ impl LifelongSolver for RhcrSolver {
         }
 
         // Build WindowAgent list
-        let window_agents: Vec<WindowAgent> = agents
+        let mut window_agents: Vec<WindowAgent> = agents
             .iter()
             .map(|a| WindowAgent {
                 index: a.index,
@@ -423,6 +465,10 @@ impl LifelongSolver for RhcrSolver {
             .map(|a| (a.pos, a.goal))
             .collect();
         let dist_maps = distance_cache.get_or_compute(ctx.grid, &pairs);
+
+        // Fill goal sequences for agents whose goal is close enough to reach
+        // within the planning horizon (reference: KivaSystem::update_goal_locations).
+        Self::fill_goal_sequences(&mut window_agents, &dist_maps, ctx.zones, self.config.horizon, rng);
 
         let window_ctx = WindowContext {
             grid: ctx.grid,
@@ -797,6 +843,53 @@ mod tests {
 
         for mode in [RhcrMode::PibtWindow, RhcrMode::PriorityAStar, RhcrMode::Pbs] {
             run_rhcr_bench(mode, grid, zones, &walkable, n, ticks);
+        }
+    }
+
+    #[test]
+    fn rhcr_fills_goal_sequences_when_goal_is_close() {
+        let grid = GridMap::new(10, 10);
+        let zones = ZoneMap {
+            pickup_cells: vec![IVec2::new(1, 1), IVec2::new(3, 3), IVec2::new(5, 5)],
+            delivery_cells: vec![IVec2::new(8, 8), IVec2::new(7, 7)],
+            corridor_cells: Vec::new(),
+            recharging_cells: Vec::new(),
+            zone_type: HashMap::new(),
+            queue_lines: Vec::new(),
+        };
+
+        let config = RhcrConfig {
+            mode: RhcrMode::PriorityAStar,
+            fallback: FallbackMode::Tiered,
+            horizon: 20,
+            replan_interval: 1,
+            pbs_node_limit: 100,
+        };
+        let mut solver = RhcrSolver::new(config);
+        let mut cache = DistanceMapCache::default();
+        let mut rng = SeededRng::new(42);
+
+        let agents = vec![AgentState {
+            index: 0,
+            pos: IVec2::ZERO,
+            goal: Some(IVec2::new(2, 0)),
+            has_plan: false,
+            task_leg: TaskLeg::TravelEmpty(IVec2::new(2, 0)),
+        }];
+
+        let ctx = SolverContext { grid: &grid, zones: &zones, tick: 0, num_agents: 1 };
+        let result = solver.step(&ctx, &agents, &mut cache, &mut rng);
+
+        match result {
+            StepResult::Replan(plans) => {
+                assert_eq!(plans.len(), 1);
+                assert!(
+                    plans[0].1.len() > 2,
+                    "Plan should extend beyond first goal via goal sequences, got {} steps",
+                    plans[0].1.len()
+                );
+            }
+            _ => panic!("expected Replan"),
         }
     }
 

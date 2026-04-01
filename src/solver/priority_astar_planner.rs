@@ -9,12 +9,15 @@ use bevy::prelude::*;
 use crate::core::action::Action;
 use crate::core::seed::SeededRng;
 
-use super::astar::{FlatConstraintIndex, SpacetimeGrid, spacetime_astar_fast};
+use super::astar::{FlatConstraintIndex, SpacetimeGrid, SeqGoalGrid,
+    spacetime_astar_fast, spacetime_astar_sequential};
+use super::heuristics::DistanceMap;
 use super::windowed::{PlanFragment, WindowContext, WindowResult, WindowedPlanner};
 
 pub struct PriorityAStarPlanner {
     ci: FlatConstraintIndex,
     stg: SpacetimeGrid,
+    seq_stg: SeqGoalGrid,
 }
 
 impl Default for PriorityAStarPlanner {
@@ -28,6 +31,7 @@ impl PriorityAStarPlanner {
         Self {
             ci: FlatConstraintIndex::new(1, 1, 1),
             stg: SpacetimeGrid::new(),
+            seq_stg: SeqGoalGrid::new(),
         }
     }
 }
@@ -62,16 +66,47 @@ impl WindowedPlanner for PriorityAStarPlanner {
         for &i in &order {
             let agent = &ctx.agents[i];
 
-            match spacetime_astar_fast(
-                ctx.grid,
-                agent.pos,
-                agent.goal,
-                &self.ci,
-                ctx.horizon as u64,
-                Some(ctx.distance_maps[i]),
-                &mut self.stg,
-                u64::MAX,
-            ) {
+            let result = if agent.goal_sequence.is_empty() {
+                spacetime_astar_fast(
+                    ctx.grid,
+                    agent.pos,
+                    agent.goal,
+                    &self.ci,
+                    ctx.horizon as u64,
+                    Some(ctx.distance_maps[i]),
+                    &mut self.stg,
+                    u64::MAX,
+                )
+            } else {
+                let seq_dms: Vec<DistanceMap> = agent.goal_sequence.iter()
+                    .map(|&g| DistanceMap::compute(ctx.grid, g))
+                    .collect();
+                let mut goals: Vec<(IVec2, &DistanceMap)> = vec![(agent.goal, ctx.distance_maps[i])];
+                for (j, &g) in agent.goal_sequence.iter().enumerate() {
+                    goals.push((g, &seq_dms[j]));
+                }
+                // Try sequential A*; fall back progressively: drop trailing
+                // goals until we find a feasible subset, then single-goal.
+                let mut result = Err(super::traits::SolverError::NoSolution);
+                while goals.len() > 1 {
+                    result = spacetime_astar_sequential(
+                        ctx.grid, agent.pos, &goals, &self.ci,
+                        ctx.horizon as u64, &mut self.seq_stg, u64::MAX,
+                    );
+                    if result.is_ok() { break; }
+                    goals.pop();
+                }
+                if result.is_err() {
+                    result = spacetime_astar_fast(
+                        ctx.grid, agent.pos, agent.goal, &self.ci,
+                        ctx.horizon as u64, Some(ctx.distance_maps[i]),
+                        &mut self.stg, u64::MAX,
+                    );
+                }
+                result
+            };
+
+            match result {
                 Ok(plan) => {
                     add_plan_to_flat_index(&mut self.ci, &plan, agent.pos, ctx.horizon);
                     all_plans[i] = Some(plan);

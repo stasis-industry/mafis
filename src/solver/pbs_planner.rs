@@ -11,7 +11,8 @@ use crate::core::action::Action;
 use crate::core::grid::GridMap;
 use crate::core::seed::SeededRng;
 
-use super::astar::{Constraints, FlatConstraintIndex, SpacetimeGrid, spacetime_astar_guided, spacetime_astar_fast};
+use super::astar::{Constraints, FlatConstraintIndex, SpacetimeGrid, SeqGoalGrid,
+    spacetime_astar_guided, spacetime_astar_fast, spacetime_astar_sequential};
 use super::heuristics::DistanceMap;
 use super::windowed::{PlanFragment, WindowAgent, WindowContext, WindowResult, WindowedPlanner};
 
@@ -315,6 +316,8 @@ pub struct PbsPlanner {
     conflict_grid: ConflictGrid,
     ci_buf: FlatConstraintIndex,
     stg: SpacetimeGrid,
+    seq_stg: SeqGoalGrid,
+    empty_ci: FlatConstraintIndex,
 }
 
 impl Default for PbsPlanner {
@@ -329,6 +332,8 @@ impl PbsPlanner {
             conflict_grid: ConflictGrid::new(),
             ci_buf: FlatConstraintIndex::new(1, 1, 1),
             stg: SpacetimeGrid::new(),
+            seq_stg: SeqGoalGrid::new(),
+            empty_ci: FlatConstraintIndex::new(1, 1, 1),
         }
     }
 }
@@ -351,24 +356,51 @@ impl WindowedPlanner for PbsPlanner {
         let cells = (ctx.grid.width * ctx.grid.height) as usize;
         self.conflict_grid.ensure_size(cells);
 
-        // Initial plans: each agent plans independently (BFS-guided A*)
+        // Initial plans: each agent plans independently.
+        // Agents with goal sequences use sequential A*; others use BFS-guided A*.
         let mut initial_plans: Vec<Vec<Action>> = Vec::with_capacity(n);
+
+        self.empty_ci.reset(ctx.grid.width, ctx.grid.height, ctx.horizon as u64);
 
         for i in 0..n {
             let agent = &ctx.agents[i];
-            match spacetime_astar_guided(
-                ctx.grid,
-                agent.pos,
-                agent.goal,
-                i,
-                &Constraints::new(),
-                ctx.horizon as u64,
-                Some(ctx.distance_maps[i]),
-            ) {
-                Ok(plan) => initial_plans.push(plan),
-                Err(_) => {
-                    initial_plans.push(vec![Action::Wait; ctx.horizon.min(1)]);
+            let plan = if agent.goal_sequence.is_empty() {
+                spacetime_astar_guided(
+                    ctx.grid, agent.pos, agent.goal, i,
+                    &Constraints::new(), ctx.horizon as u64,
+                    Some(ctx.distance_maps[i]),
+                )
+            } else {
+                let seq_dms: Vec<DistanceMap> = agent.goal_sequence.iter()
+                    .map(|&g| DistanceMap::compute(ctx.grid, g))
+                    .collect();
+                let mut goals: Vec<(IVec2, &DistanceMap)> = vec![(agent.goal, ctx.distance_maps[i])];
+                for (j, &g) in agent.goal_sequence.iter().enumerate() {
+                    goals.push((g, &seq_dms[j]));
                 }
+                // Try sequential A*; fall back progressively: drop trailing
+                // goals until we find a feasible subset, then single-goal.
+                let mut plan_result = Err(super::traits::SolverError::NoSolution);
+                while goals.len() > 1 {
+                    plan_result = spacetime_astar_sequential(
+                        ctx.grid, agent.pos, &goals, &self.empty_ci,
+                        ctx.horizon as u64, &mut self.seq_stg, u64::MAX,
+                    );
+                    if plan_result.is_ok() { break; }
+                    goals.pop();
+                }
+                if plan_result.is_err() {
+                    plan_result = spacetime_astar_guided(
+                        ctx.grid, agent.pos, agent.goal, i,
+                        &Constraints::new(), ctx.horizon as u64,
+                        Some(ctx.distance_maps[i]),
+                    );
+                }
+                plan_result
+            };
+            match plan {
+                Ok(p) => initial_plans.push(p),
+                Err(_) => initial_plans.push(vec![Action::Wait; ctx.horizon.min(1)]),
             }
         }
 
