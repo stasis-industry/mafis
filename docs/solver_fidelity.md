@@ -1,6 +1,6 @@
 # Solver Fidelity Matrix
 
-Audit date: 2026-03-30. Updated with all 8 solver sections.
+Audit date: 2026-03-30. Updated with all 7 solver sections.
 
 ## Summary
 
@@ -11,7 +11,6 @@ Audit date: 2026-03-30. Updated with all 8 solver sections.
 | RHCR (PIBT-Window) | Li et al. 2021 (AAAI) | Property-verified | 1 unit test, collision-free verified |
 | RHCR (Priority A*) | Li et al. 2021 (AAAI) | Property-verified | 2 unit tests, collision-free verified |
 | Token Passing | Ma et al. 2017 (AAMAS) | Property-verified | 4 unit tests, edge-swap verified |
-| PIBT+APF | Pertzovsky et al. 2025 | Line-audited, 1 fix | Sequential APF, parameters match Table 1 |
 | TPTS | Ma et al. 2017 Alg. 2 | Line-audited, 1 fix | 4 documented deviations |
 | RT-LaCAM | Liang et al. 2025 (SoCS) | Line-audited, 5 fixes | 2 documented deviations remain |
 
@@ -19,7 +18,7 @@ Audit date: 2026-03-30. Updated with all 8 solver sections.
 - "Line-audited" = implementation compared against paper pseudocode, deviations documented.
 - "Property-verified" = algorithmic properties from the paper are tested (saturation, collision-freedom, determinism, liveness) but no line-by-line pseudocode comparison was done.
 
-All 8 solvers pass: collision-free verification (500 ticks), deterministic replay (all solvers x all schedulers), metamorphic properties (MR1-MR4), and rewind determinism.
+All 7 solvers pass: collision-free verification (500 ticks), deterministic replay (all solvers x all schedulers), metamorphic properties (MR1-MR4), and rewind determinism.
 
 ---
 
@@ -34,7 +33,7 @@ All 8 solvers pass: collision-free verification (500 ticks), deterministic repla
 | Deterministic tie-breaking | MATCH (shuffle seed from tick number) |
 | Grid-based 4-connected movement | MATCH |
 | O(n log n) per timestep | MATCH |
-| Optional cell-level guidance bias | EXTENSION (not in paper; used by PIBT+APF) |
+| Optional cell-level guidance bias | EXTENSION (not in paper) |
 
 **Verified properties:**
 - Throughput saturation at high density (calibration test)
@@ -92,28 +91,6 @@ All 8 solvers pass: collision-free verification (500 ticks), deterministic repla
 **Implementation note:** MasterConstraintIndex uses reference-counted vertex/edge constraint buffers for O(1) add/remove per agent path. This is an efficiency optimization over the naive approach (rebuild constraints from scratch) but produces identical constraint sets.
 
 ---
-
-## PIBT+APF (Pertzovsky et al., arXiv:2505.22753)
-
-**Files:** `src/solver/apf_guidance.rs`, `src/solver/pibt_core.rs`
-
-| Requirement | Status |
-|-------------|--------|
-| Sequential APF inside PIBT recursion | MATCH |
-| Exponential decay w*gamma^(-dist) | MATCH |
-| Goal cell returns bias 0 | MATCH |
-| Parameters match Table 1 (w=0.1, gamma=3, d_max=2, t_max=2) | MATCH |
-| NOT a GuidanceLayer wrapper | MATCH |
-| Integration via cell_bias mechanism | MATCH |
-| Idle agents contribute APF | MATCH (fixed) |
-
-**Fix applied:** Idle agents now call `add_apf_for_agent` at their position.
-Under fault conditions with many immobile agents, this repels tasked agents
-from occupied cells.
-
-**Remaining deviation:** APF projection starts from the agent's next position
-(after PIBT commit), not current position. Minor impact with d_max=2. The
-paper's Eq. 11 projects from the current configuration.
 
 ## TPTS (Ma et al., AAMAS 2017, Algorithm 2)
 
