@@ -740,10 +740,19 @@ impl LifelongSolver for RhcrSolver {
                         let mut combined: Vec<(usize, Vec<Action>)> = Vec::with_capacity(
                             solved.len() + failed.len(),
                         );
+                        let solved_first_steps: Vec<(usize, IVec2)> = solved
+                            .iter()
+                            .filter_map(|frag| {
+                                let agent = agents.iter().find(|a| a.index == frag.agent_index)?;
+                                let target = frag.actions.first()
+                                    .map(|action| action.apply(agent.pos))
+                                    .unwrap_or(agent.pos);
+                                Some((frag.agent_index, target))
+                            })
+                            .collect();
                         for frag in &solved {
                             combined.push((frag.agent_index, frag.actions.to_vec()));
                         }
-                        // Failed agents get single Wait as their "plan"
                         for &idx in &failed {
                             combined.push((idx, vec![Action::Wait]));
                         }
@@ -755,8 +764,20 @@ impl LifelongSolver for RhcrSolver {
                             self.config.horizon,
                         );
 
-                        for (idx, actions) in resolved {
-                            self.plan_buffer.push((idx, actions));
+                        // LRA may produce all-Wait plans for stuck agents on tight maps.
+                        // Fall back to PIBT for those agents.
+                        let mut pibt_needed: Vec<usize> = Vec::new();
+                        for (idx, actions) in &resolved {
+                            if actions.iter().all(|a| *a == Action::Wait) && failed.contains(idx) {
+                                pibt_needed.push(*idx);
+                            } else {
+                                self.plan_buffer.push((*idx, actions.iter().copied().collect()));
+                            }
+                        }
+                        if !pibt_needed.is_empty() {
+                            self.pibt_fallback_for(
+                                &pibt_needed, agents, distance_cache, ctx.grid, &solved_first_steps,
+                            );
                         }
                     }
                     FallbackMode::Tiered => {
@@ -827,6 +848,17 @@ impl LifelongSolver for RhcrSolver {
                             combined.push((idx, vec![Action::Wait]));
                         }
 
+                        let solved_first_steps: Vec<(usize, IVec2)> = kept_solved
+                            .iter()
+                            .filter_map(|frag| {
+                                let agent = agents.iter().find(|a| a.index == frag.agent_index)?;
+                                let target = frag.actions.first()
+                                    .map(|action| action.apply(agent.pos))
+                                    .unwrap_or(agent.pos);
+                                Some((frag.agent_index, target))
+                            })
+                            .collect();
+
                         let resolved = Self::lra_resolve_conflicts(
                             &combined,
                             agents,
@@ -834,8 +866,18 @@ impl LifelongSolver for RhcrSolver {
                             self.config.horizon,
                         );
 
-                        for (idx, actions) in resolved {
-                            self.plan_buffer.push((idx, actions));
+                        let mut pibt_needed: Vec<usize> = Vec::new();
+                        for (idx, actions) in &resolved {
+                            if actions.iter().all(|a| *a == Action::Wait) && extended_failed.contains(idx) {
+                                pibt_needed.push(*idx);
+                            } else {
+                                self.plan_buffer.push((*idx, actions.iter().copied().collect()));
+                            }
+                        }
+                        if !pibt_needed.is_empty() {
+                            self.pibt_fallback_for(
+                                &pibt_needed, agents, distance_cache, ctx.grid, &solved_first_steps,
+                            );
                         }
                     }
                     FallbackMode::Full => {
