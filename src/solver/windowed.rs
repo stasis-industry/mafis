@@ -68,4 +68,16 @@ pub trait WindowedPlanner: Send + Sync {
         ctx: &WindowContext,
         rng: &mut SeededRng,
     ) -> WindowResult;
+
+    /// Reset all internal state (for rewind/scenario change).
+    /// Default: no-op.
+    fn reset(&mut self) {}
+
+    /// Save internal priority state for deterministic rewind.
+    /// Default: no state to save.
+    fn save_priorities(&self) -> Vec<f32> { Vec::new() }
+
+    /// Restore priorities from a snapshot.
+    /// Default: no-op.
+    fn restore_priorities(&mut self, _priorities: &[f32]) {}
 }

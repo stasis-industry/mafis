@@ -103,6 +103,18 @@ impl WindowedPlanner for PibtWindowPlanner {
             WindowResult::Partial { solved, failed }
         }
     }
+
+    fn reset(&mut self) {
+        self.core.reset();
+    }
+
+    fn save_priorities(&self) -> Vec<f32> {
+        self.core.priorities().to_vec()
+    }
+
+    fn restore_priorities(&mut self, priorities: &[f32]) {
+        self.core.set_priorities(priorities);
+    }
 }
 
 #[cfg(test)]

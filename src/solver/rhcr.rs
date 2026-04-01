@@ -398,17 +398,32 @@ impl LifelongSolver for RhcrSolver {
     fn reset(&mut self) {
         self.ticks_since_replan = self.config.replan_interval.saturating_sub(1);
         self.pibt_fallback.reset();
+        self.planner.reset();
         self.plan_buffer.clear();
         self.prev_positions.clear();
         self.congestion_streak = 0;
     }
 
     fn save_priorities(&self) -> Vec<f32> {
-        self.pibt_fallback.priorities().to_vec()
+        // Save both fallback PIBT and windowed planner priorities.
+        // Format: [fallback_len, fallback_priorities..., planner_priorities...]
+        let fb = self.pibt_fallback.priorities();
+        let wp = self.planner.save_priorities();
+        let mut out = Vec::with_capacity(1 + fb.len() + wp.len());
+        out.push(fb.len() as f32);
+        out.extend_from_slice(fb);
+        out.extend_from_slice(&wp);
+        out
     }
 
     fn restore_priorities(&mut self, priorities: &[f32]) {
-        self.pibt_fallback.set_priorities(priorities);
+        if priorities.is_empty() { return; }
+        let fb_len = priorities[0] as usize;
+        let rest = &priorities[1..];
+        if rest.len() >= fb_len {
+            self.pibt_fallback.set_priorities(&rest[..fb_len]);
+            self.planner.restore_priorities(&rest[fb_len..]);
+        }
     }
 
     fn step<'a>(
@@ -985,5 +1000,98 @@ mod tests {
             "RHCR {:?}: {}ticks × {}agents in {:?} ({} µs/tick) [H={} W={}]",
             mode, ticks, n, elapsed, us_per_tick, h, w,
         );
+    }
+
+    /// Throughput benchmark: measures tasks-completed per 100 ticks on warehouse_large.
+    #[test]
+    fn rhcr_throughput_benchmark() {
+        use crate::core::topology::TopologyRegistry;
+        use rand::SeedableRng;
+        use rand_chacha::ChaCha8Rng;
+        use rand::Rng;
+
+        let registry = TopologyRegistry::load_from_dir(std::path::Path::new("topologies"));
+        let entry = registry.find("warehouse_large").expect("warehouse_large.json missing");
+        let (grid, zones) = TopologyRegistry::parse_entry(entry).unwrap();
+
+        let walkable: Vec<IVec2> = zones.corridor_cells.iter()
+            .chain(zones.pickup_cells.iter())
+            .chain(zones.delivery_cells.iter())
+            .copied()
+            .filter(|p| grid.is_walkable(*p))
+            .collect();
+
+        let n = 30;
+        let ticks = 200u64;
+
+        for mode in [RhcrMode::PibtWindow, RhcrMode::PriorityAStar, RhcrMode::Pbs] {
+            let mut rng_seed = ChaCha8Rng::seed_from_u64(99);
+            let mut positions: Vec<IVec2> = walkable[..n].to_vec();
+            let mut goals: Vec<IVec2> = (0..n)
+                .map(|_| walkable[rng_seed.random_range(0..walkable.len())])
+                .collect();
+            let mut plans: Vec<std::collections::VecDeque<Action>> =
+                vec![std::collections::VecDeque::new(); n];
+
+            let config = RhcrConfig::auto(mode, (grid.width * grid.height) as usize, n);
+            let h = config.horizon;
+            let w = config.replan_interval;
+            let mut solver = RhcrSolver::new(config);
+            let mut cache = DistanceMapCache::default();
+            let mut rng = SeededRng::new(42);
+            let mut tasks_completed = 0u64;
+
+            for tick in 0..ticks {
+                for i in 0..n {
+                    let action = plans[i].pop_front().unwrap_or(Action::Wait);
+                    let new_pos = action.apply(positions[i]);
+                    assert!(grid.is_walkable(new_pos));
+                    positions[i] = new_pos;
+                }
+
+                for i in 0..n {
+                    if positions[i] == goals[i] {
+                        goals[i] = walkable[rng_seed.random_range(0..walkable.len())];
+                        plans[i].clear();
+                        tasks_completed += 1;
+                    }
+                }
+
+                let agent_states: Vec<AgentState> = (0..n)
+                    .map(|i| AgentState {
+                        index: i,
+                        pos: positions[i],
+                        goal: Some(goals[i]),
+                        has_plan: !plans[i].is_empty(),
+                        task_leg: TaskLeg::Free,
+                    })
+                    .collect();
+
+                let ctx = SolverContext {
+                    grid: &grid,
+                    zones: &zones,
+                    tick,
+                    num_agents: n,
+                };
+
+                match solver.step(&ctx, &agent_states, &mut cache, &mut rng) {
+                    StepResult::Continue => {}
+                    StepResult::Replan(new_plans) => {
+                        for (idx, actions) in new_plans {
+                            if *idx < n {
+                                plans[*idx] = actions.iter().copied().collect();
+                            }
+                        }
+                    }
+                }
+            }
+
+            eprintln!(
+                "THROUGHPUT RHCR {:?}: {} tasks in {} ticks ({:.1}/100t) [H={} W={}]",
+                mode, tasks_completed, ticks,
+                tasks_completed as f64 / ticks as f64 * 100.0,
+                h, w,
+            );
+        }
     }
 }
