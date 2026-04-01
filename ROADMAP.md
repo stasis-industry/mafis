@@ -36,6 +36,52 @@ Items are not prioritized within a section — promote to a GitHub Issue when re
 
 ---
 
+## Heterogeneous Robot Fleets
+
+### Speed Tiers and Size Constraints
+**Status:** All agents are identical — same speed, size, and walkability.  
+**Impact:** High — real warehouses mix fast pickers with slow heavy lifters. Size constraints determine which corridors a robot can enter.  
+**What's needed:**
+- `RobotType` component: speed multiplier, footprint radius, task affinity set, Weibull β/η overrides
+- Per-type `GridMap` views: wide robots mark narrow corridors as unwalkable
+- Spacetime A* cost parameterized by speed (different timestep costs per agent type)
+- Type-aware task assignment: only assign robot type X to zone Y
+
+### Differentiated Wear and Battery Model
+**Status:** All agents share the same Weibull wear distribution. No battery model exists.  
+**Impact:** Medium — heavy-load robots degrade faster; battery depletion is a distinct fault mode from mechanical wear.  
+**What's needed:** Per-type β/η in `FaultConfig`. New fault scenario `BatteryDepletion`: agent stops when charge reaches 0, resumes after recharge delay. Recharge stations as a new zone type.
+
+---
+
+## Machine Learning / Deep Reinforcement Learning
+
+### DRL Solver (PRIMAL-style — 5th Paradigm: Learned)
+**Status:** Not implemented. All 7 solvers use classical algorithms.  
+**Impact:** High research value — the key question for MAFIS is not "does DRL solve MAPF well?" but "does a learned policy degrade differently under faults than classical solvers?" DRL trained on fault-free maps may collapse faster under Weibull wear than PIBT, or generalize better due to implicit variation during training.  
+**What's needed:** Decentralized DRL solver where each agent acts from a local observation (k×k grid patch + goal direction + nearby agent states). Implements `LifelongSolver` trait — one `step()` call per tick, no window. Candidate architectures: PRIMAL (Sartoretti et al., 2019), MAGAT (Li et al., 2021).  
+**Research angle:** Run the full fault scenario matrix (5 scenarios × all topologies) with the DRL solver alongside classical solvers. Compare resilience profiles in the scorecard.
+
+### DRL Adaptive Scheduler
+**Status:** Task schedulers are classical (random, closest, balanced, roundtrip). No learned scheduler exists.  
+**Impact:** Medium — optimal task-to-agent assignment changes mid-operation as faults accumulate. A learned policy could adapt to current fleet health and zone congestion in ways classical schedulers cannot.  
+**What's needed:** Contextual bandit or lightweight DRL policy that maps current state (alive agent count, per-zone congestion, fault rate, agent heat distribution) to task assignment decisions. Implements `TaskScheduler` trait — drop-in replacement.  
+**Research angle:** Does adaptive scheduling improve resilience compared to any fixed scheduler under progressive Weibull wear?
+
+### ML Fault Prediction (LSTM on Heat Time Series)
+**Status:** Failure ticks are pre-sampled from Weibull at init — each agent's death is predetermined. No online prediction exists.  
+**Impact:** Medium — proactive redeployment before failure avoids cascade effects. Enables a new fault scenario type: `PredictiveMaintenance`.  
+**What's needed:** LSTM or small Transformer trained on `(operational_age, heat, task_leg)` time series per agent → failure probability in next N ticks. New scenario: agent retires gracefully when predicted risk exceeds threshold, before the physical fault fires. Compare reactive vs predictive handling in the scorecard.  
+**Data source:** MAFIS already logs heat levels every tick — training data is free from existing simulations.
+
+### Meta-RL Solver Selection
+**Status:** Solver is fixed at simulation start. No runtime switching exists.  
+**Impact:** Low-medium — the optimal solver changes mid-operation (low density → PIBT fine; high density + cascading faults → RHCR better). Adaptive switching could outperform any fixed solver.  
+**What's needed:** Multi-armed bandit or contextual DRL that selects the active solver based on current state features (density, recent throughput delta, fault rate, alive count). No MAPF policy training needed — just a meta-policy over existing solvers. Requires `ActiveSolver` hot-swapping without resetting agent plans.  
+**Prerequisite:** Heterogeneous fleet support (otherwise the state space is too simple to warrant learned switching).
+
+---
+
 ## Non-Goals
 
 These are intentionally out of scope for MAFIS:
