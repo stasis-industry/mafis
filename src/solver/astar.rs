@@ -547,10 +547,6 @@ pub fn spacetime_astar_sequential<C: ConstraintChecker>(
             return Ok(stg.path_buf.to_vec());
         }
 
-        if current.time >= max_time {
-            continue;
-        }
-
         let cur_st = stg.st_index(current.pos, current.goal_id, current.time);
 
         if stg.closed[cur_st] {
@@ -564,6 +560,8 @@ pub fn spacetime_astar_sequential<C: ConstraintChecker>(
 
         // Goal-layer transition: if at current sub-goal, advance goal_id.
         // This is a zero-time transition (same pos, same time, next layer).
+        // Must happen BEFORE the max_time guard — reaching the last goal at
+        // exactly max_time is valid (no further movement needed).
         if current.pos == goals[current.goal_id].0 {
             let next_gid = current.goal_id + 1;
             let next_st = stg.st_index(current.pos, next_gid, current.time);
@@ -584,6 +582,11 @@ pub fn spacetime_astar_sequential<C: ConstraintChecker>(
             }
             // Don't expand movement successors from a goal node — must transition first.
             // (The agent logically "completes" this sub-goal before moving on.)
+            continue;
+        }
+
+        // Block time-advancing moves beyond the horizon.
+        if current.time >= max_time {
             continue;
         }
 
@@ -1345,5 +1348,25 @@ mod tests {
                 assert_ne!(pos, IVec2::new(2, 0), "constraint violated at t=2");
             }
         }
+    }
+
+    #[test]
+    fn sequential_astar_last_goal_at_exact_max_time() {
+        // Regression: reaching last goal at exactly max_time must succeed.
+        // The zero-time layer transition fires even at the horizon boundary.
+        let grid = GridMap::new(5, 5);
+        let g1 = IVec2::new(3, 0); // Manhattan 3 from start
+        let g2 = IVec2::new(4, 0); // Manhattan 1 from g1 — total 4
+        let dm1 = DistanceMap::compute(&grid, g1);
+        let dm2 = DistanceMap::compute(&grid, g2);
+        let goals: Vec<(IVec2, &DistanceMap)> = vec![(g1, &dm1), (g2, &dm2)];
+
+        let mut stg = SeqGoalGrid::new();
+        let ci = FlatConstraintIndex::new(5, 5, 4);
+        let result = spacetime_astar_sequential(
+            &grid, IVec2::ZERO, &goals, &ci, 4, &mut stg, u64::MAX,
+        );
+        let plan = result.expect("should find path at exact horizon");
+        assert_eq!(plan.len(), 4);
     }
 }
