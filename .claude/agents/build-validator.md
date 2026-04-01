@@ -28,7 +28,6 @@ a precise diagnosis.
 ### Step 1 — Compile
 
 ```bash
-cd /Users/teddyadmin/Developments/Rust/Research-Project/mafis
 cargo build --release --target wasm32-unknown-unknown 2>&1
 ```
 
