@@ -147,6 +147,7 @@ fn check_finished_trigger(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn process_export_requests(
     mut requests: MessageReader<ExportRequest>,
     sim_config: Res<SimulationConfig>,

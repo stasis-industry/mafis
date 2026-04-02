@@ -401,7 +401,7 @@ pub fn pibt_one_step_constrained(
 // Recursive PIBT assignment (grid-indexed occupation)
 // ---------------------------------------------------------------------------
 
-#[allow(clippy::only_used_in_recursion)]
+#[allow(clippy::only_used_in_recursion, clippy::too_many_arguments)]
 fn pibt_assign_grid(
     agent: usize,
     next_pos: &mut [IVec2],

@@ -159,6 +159,7 @@ mod observatory_panels {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn right_panel_ui(
         mut contexts: EguiContexts,
         desktop: Res<DesktopUiState>,

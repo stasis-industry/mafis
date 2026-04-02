@@ -489,6 +489,7 @@ mod observatory_controls {
     // loading_tick — runs in Update while in SimState::Loading
     // ---------------------------------------------------------------------------
 
+    #[allow(clippy::too_many_arguments)]
     fn loading_tick(
         mut commands: Commands,
         mut progress: ResMut<LoadingProgress>,

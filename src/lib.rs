@@ -1,5 +1,3 @@
-#![allow(clippy::too_many_arguments, clippy::type_complexity)]
-
 pub mod analysis;
 pub mod constants;
 pub mod core;

@@ -577,6 +577,7 @@ pub fn replay_manual_faults(
 /// Processes manual fault commands. Runs in Update (works when Paused).
 /// Applies faults to both ECS (immediate visual) and runner (persistence).
 #[cfg(not(any(test, feature = "headless")))]
+#[allow(clippy::too_many_arguments)]
 pub fn process_manual_faults(
     mut commands: Commands,
     mut manual_cmds: MessageReader<ManualFaultCommand>,

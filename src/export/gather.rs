@@ -25,6 +25,7 @@ type AgentQueryItem<'a> = (
     bool, // Has<Dead>
 );
 
+#[allow(clippy::too_many_arguments)]
 pub fn gather_snapshot(
     trigger: &ExportTrigger,
     sim_config: &SimulationConfig,
