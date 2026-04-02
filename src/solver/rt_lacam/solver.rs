@@ -22,8 +22,8 @@ use crate::core::action::Direction;
 use crate::core::grid::GridMap;
 use crate::core::seed::SeededRng;
 
-use crate::solver::shared::heuristics::{DistanceMap, DistanceMapCache, delta_to_action};
 use crate::solver::lifelong::{AgentPlan, AgentState, LifelongSolver, SolverContext, StepResult};
+use crate::solver::shared::heuristics::{DistanceMap, DistanceMapCache, delta_to_action};
 use crate::solver::shared::pibt_core::PibtCore;
 use crate::solver::shared::traits::{Optimality, Scalability, SolverInfo};
 
@@ -77,6 +77,7 @@ struct LowLevelNode {
 /// High-level node: a joint configuration of all agents.
 struct HighLevelNode {
     positions: Vec<IVec2>,
+    #[allow(dead_code)]
     hash: u64,
     parent: Option<NodeId>,
     neighbors: Vec<NodeId>,
@@ -89,14 +90,17 @@ struct HighLevelNode {
 }
 
 impl HighLevelNode {
-    fn new(positions: Vec<IVec2>, hash: u64, parent: Option<NodeId>, g: u64, h: u64, order: Vec<usize>) -> Self {
+    fn new(
+        positions: Vec<IVec2>,
+        hash: u64,
+        parent: Option<NodeId>,
+        g: u64,
+        h: u64,
+        order: Vec<usize>,
+    ) -> Self {
         // Initialize with root LLN (no constraints)
         let mut tree = VecDeque::new();
-        tree.push_back(LowLevelNode {
-            who: Vec::new(),
-            where_: Vec::new(),
-            depth: 0,
-        });
+        tree.push_back(LowLevelNode { who: Vec::new(), where_: Vec::new(), depth: 0 });
         Self { positions, hash, parent, neighbors: Vec::new(), tree, order, g, h }
     }
 }
@@ -139,8 +143,8 @@ pub struct RtLaCAMSolver {
 
 impl RtLaCAMSolver {
     pub fn new(grid_area: usize, _num_agents: usize) -> Self {
-        let horizon = ((grid_area as f64).sqrt() as usize)
-            .clamp(RT_LACAM_MIN_HORIZON, RT_LACAM_MAX_HORIZON);
+        let horizon =
+            ((grid_area as f64).sqrt() as usize).clamp(RT_LACAM_MIN_HORIZON, RT_LACAM_MAX_HORIZON);
 
         Self {
             node_budget: RT_LACAM_NODE_BUDGET,
@@ -179,7 +183,9 @@ impl RtLaCAMSolver {
 
     /// Compute heuristic: sum of individual agent distances to goals.
     fn compute_h(positions: &[IVec2], dist_maps: &[&DistanceMap]) -> u64 {
-        positions.iter().enumerate()
+        positions
+            .iter()
+            .enumerate()
             .map(|(i, &pos)| {
                 let d = dist_maps[i].get(pos);
                 if d == u64::MAX { 1000 } else { d }
@@ -188,7 +194,11 @@ impl RtLaCAMSolver {
     }
 
     /// Compute agent priority ordering: descending distance to goal.
-    fn compute_order(positions: &[IVec2], dist_maps: &[&DistanceMap], shuffle_seed: u64) -> Vec<usize> {
+    fn compute_order(
+        positions: &[IVec2],
+        dist_maps: &[&DistanceMap],
+        shuffle_seed: u64,
+    ) -> Vec<usize> {
         let mut order: Vec<usize> = (0..positions.len()).collect();
         order.sort_unstable_by(|&a, &b| {
             let da = dist_maps[a].get(positions[a]);
@@ -216,23 +226,19 @@ impl RtLaCAMSolver {
         let positions = self.arena[node_id].positions.clone();
 
         // Build constraints from LLN: (agent_index, target_position)
-        let constraints: Vec<(usize, IVec2)> = lln.who.iter()
-            .zip(lln.where_.iter())
-            .map(|(&agent, &pos)| (agent, pos))
-            .collect();
+        let constraints: Vec<(usize, IVec2)> =
+            lln.who.iter().zip(lln.where_.iter()).map(|(&agent, &pos)| (agent, pos)).collect();
 
         // Use PIBT with constraints to generate the successor.
         // Mix node_id and constraint depth into the seed so different nodes
         // and different constraint depths produce different PIBT candidates.
         self.pibt.set_shuffle_seed(self.zobrist_seed ^ node_id as u64 ^ lln.depth as u64);
-        let actions = self.pibt.one_step_constrained(
-            &positions, goals, grid, dist_maps, &constraints,
-        );
+        let actions =
+            self.pibt.one_step_constrained(&positions, goals, grid, dist_maps, &constraints);
 
         // Convert actions to positions
-        let new_positions: Vec<IVec2> = positions.iter().enumerate()
-            .map(|(i, &pos)| actions[i].apply(pos))
-            .collect();
+        let new_positions: Vec<IVec2> =
+            positions.iter().enumerate().map(|(i, &pos)| actions[i].apply(pos)).collect();
 
         // Verify all positions are walkable
         if !new_positions.iter().all(|&p| grid.is_walkable(p)) {
@@ -252,9 +258,8 @@ impl RtLaCAMSolver {
         } else {
             let h = Self::compute_h(new_positions, dist_maps);
             let order = Self::compute_order(new_positions, dist_maps, self.zobrist_seed);
-            let node = HighLevelNode::new(
-                new_positions.to_vec(), hash, self.current_node, 0, h, order,
-            );
+            let node =
+                HighLevelNode::new(new_positions.to_vec(), hash, self.current_node, 0, h, order);
             let id = self.alloc_node(node);
             self.explored.insert(hash, id);
             // Add bidirectional neighbor link with current node
@@ -335,7 +340,9 @@ impl RtLaCAMSolver {
                     prev = n;
                     n = p;
                     depth += 1;
-                    if depth > self.arena.len() { break; } // cycle guard
+                    if depth > self.arena.len() {
+                        break;
+                    } // cycle guard
                 }
                 None => break,
             }
@@ -358,6 +365,7 @@ impl RtLaCAMSolver {
                 return Some(&self.arena[step].positions);
             }
             for &neighbor in &self.arena[node].neighbors {
+                #[allow(clippy::map_entry)]
                 if !bfs_parent.contains_key(&neighbor) {
                     bfs_parent.insert(neighbor, node);
                     bfs_queue.push_back(neighbor);
@@ -369,12 +377,7 @@ impl RtLaCAMSolver {
     }
 
     /// Run bounded DFS expansion.
-    fn expand(
-        &mut self,
-        grid: &GridMap,
-        goals: &[IVec2],
-        dist_maps: &[&DistanceMap],
-    ) {
+    fn expand(&mut self, grid: &GridMap, goals: &[IVec2], dist_maps: &[&DistanceMap]) {
         let n = goals.len();
         let width = self.grid_width;
         let seed = self.zobrist_seed;
@@ -395,9 +398,8 @@ impl RtLaCAMSolver {
 
             // Goal check
             if self.goal_node.is_none() {
-                let at_goal = self.arena[node_id].positions.iter()
-                    .zip(goals.iter())
-                    .all(|(p, g)| p == g);
+                let at_goal =
+                    self.arena[node_id].positions.iter().zip(goals.iter()).all(|(p, g)| p == g);
                 if at_goal {
                     self.goal_node = Some(node_id);
                     break; // found solution
@@ -443,7 +445,10 @@ impl RtLaCAMSolver {
             // Generate successor config using PIBT + constraints
             let new_positions = match self.generate_config(node_id, &lln, grid, dist_maps, goals) {
                 Some(p) => p,
-                None => { expanded += 1; continue; }
+                None => {
+                    expanded += 1;
+                    continue;
+                }
             };
 
             let new_hash = hash_config(&new_positions, width, seed);
@@ -461,9 +466,8 @@ impl RtLaCAMSolver {
                 let h = Self::compute_h(&new_positions, dist_maps);
                 let g = self.arena[node_id].g + 1;
                 let order = Self::compute_order(&new_positions, dist_maps, seed);
-                let new_node = HighLevelNode::new(
-                    new_positions, new_hash, Some(node_id), g, h, order,
-                );
+                let new_node =
+                    HighLevelNode::new(new_positions, new_hash, Some(node_id), g, h, order);
                 let new_id = self.alloc_node(new_node);
                 self.explored.insert(new_hash, new_id);
                 self.arena[node_id].neighbors.push(new_id);
@@ -500,7 +504,11 @@ impl RtLaCAMSolver {
         }));
 
         let actions = self.pibt.one_step_with_tasks(
-            &self.positions_buf, &self.goals_buf, ctx.grid, &dist_maps, &self.has_task_buf,
+            &self.positions_buf,
+            &self.goals_buf,
+            ctx.grid,
+            &dist_maps,
+            &self.has_task_buf,
         );
 
         self.plan_buffer.clear();
@@ -513,7 +521,9 @@ impl RtLaCAMSolver {
 }
 
 impl LifelongSolver for RtLaCAMSolver {
-    fn name(&self) -> &'static str { "rt_lacam" }
+    fn name(&self) -> &'static str {
+        "rt_lacam"
+    }
 
     fn info(&self) -> SolverInfo {
         SolverInfo {
@@ -576,6 +586,7 @@ impl LifelongSolver for RtLaCAMSolver {
         } else {
             // Reroot: agents may have moved since last tick
             let current_positions: Vec<IVec2> = agents.iter().map(|a| a.pos).collect();
+            #[allow(clippy::unnecessary_unwrap)]
             let cur_id = self.current_node.unwrap();
             if self.arena[cur_id].positions != current_positions {
                 self.reroot(&current_positions, &dist_maps);
@@ -596,9 +607,8 @@ impl LifelongSolver for RtLaCAMSolver {
         // 1. If goal_node found: backtrack through parent chain (optimal).
         // 2. Otherwise: pick best depth-1 neighbor (lowest heuristic).
         // Clone positions to avoid borrow conflict with self.plan_buffer.
-        let next_step: Option<Vec<IVec2>> = self.extract_next_config()
-            .or_else(|| self.best_depth1_neighbor())
-            .map(|p| p.to_vec());
+        let next_step: Option<Vec<IVec2>> =
+            self.extract_next_config().or_else(|| self.best_depth1_neighbor()).map(|p| p.to_vec());
 
         if let Some(next_positions) = next_step {
             let all_walkable = next_positions.iter().all(|&p| ctx.grid.is_walkable(p));
@@ -675,7 +685,10 @@ mod tests {
 
         for tick in 0..30 {
             let agents = vec![AgentState {
-                index: 0, pos, goal: Some(goal), has_plan: tick > 0,
+                index: 0,
+                pos,
+                goal: Some(goal),
+                has_plan: tick > 0,
                 task_leg: TaskLeg::TravelEmpty(goal),
             }];
             let ctx = SolverContext { grid: &grid, zones: &zones, tick, num_agents: 1 };
@@ -686,7 +699,9 @@ mod tests {
                     }
                 }
             }
-            if pos == goal { return; }
+            if pos == goal {
+                return;
+            }
         }
         assert_eq!(pos, goal);
     }
@@ -704,8 +719,11 @@ mod tests {
         for tick in 0..40 {
             let agents: Vec<AgentState> = (0..2)
                 .map(|i| AgentState {
-                    index: i, pos: positions[i], goal: Some(goals[i]),
-                    has_plan: tick > 0, task_leg: TaskLeg::TravelEmpty(goals[i]),
+                    index: i,
+                    pos: positions[i],
+                    goal: Some(goals[i]),
+                    has_plan: tick > 0,
+                    task_leg: TaskLeg::TravelEmpty(goals[i]),
                 })
                 .collect();
 
@@ -748,11 +766,15 @@ mod tests {
 
             for tick in 0..15 {
                 let agents = vec![AgentState {
-                    index: 0, pos, goal: Some(goal), has_plan: tick > 0,
+                    index: 0,
+                    pos,
+                    goal: Some(goal),
+                    has_plan: tick > 0,
                     task_leg: TaskLeg::TravelEmpty(goal),
                 }];
                 let ctx = SolverContext { grid: &grid, zones: &zones, tick, num_agents: 1 };
-                if let StepResult::Replan(plans) = solver.step(&ctx, &agents, &mut cache, &mut rng) {
+                if let StepResult::Replan(plans) = solver.step(&ctx, &agents, &mut cache, &mut rng)
+                {
                     if let Some((_, actions)) = plans.first() {
                         if let Some(action) = actions.first() {
                             pos = action.apply(pos);
@@ -779,7 +801,10 @@ mod tests {
         // Run 5 ticks
         for tick in 0..5 {
             let agents = vec![AgentState {
-                index: 0, pos, goal: Some(goal), has_plan: tick > 0,
+                index: 0,
+                pos,
+                goal: Some(goal),
+                has_plan: tick > 0,
                 task_leg: TaskLeg::TravelEmpty(goal),
             }];
             let ctx = SolverContext { grid: &grid, zones: &zones, tick, num_agents: 1 };
@@ -832,7 +857,10 @@ mod tests {
 
         for tick in 0..20 {
             let agents = vec![AgentState {
-                index: 0, pos, goal: Some(goal), has_plan: tick > 0,
+                index: 0,
+                pos,
+                goal: Some(goal),
+                has_plan: tick > 0,
                 task_leg: TaskLeg::TravelEmpty(goal),
             }];
             let ctx = SolverContext { grid: &grid, zones: &zones, tick, num_agents: 1 };
@@ -851,7 +879,9 @@ mod tests {
             );
             prev_explored_count = current_explored;
 
-            if pos == goal { break; }
+            if pos == goal {
+                break;
+            }
         }
     }
 
@@ -871,8 +901,11 @@ mod tests {
         for tick in 0..20 {
             let agents: Vec<AgentState> = (0..2)
                 .map(|i| AgentState {
-                    index: i, pos: positions[i], goal: Some(goals[i]),
-                    has_plan: tick > 0, task_leg: TaskLeg::TravelEmpty(goals[i]),
+                    index: i,
+                    pos: positions[i],
+                    goal: Some(goals[i]),
+                    has_plan: tick > 0,
+                    task_leg: TaskLeg::TravelEmpty(goals[i]),
                 })
                 .collect();
 
@@ -907,18 +940,17 @@ mod tests {
         let mut solver = RtLaCAMSolver::new(25, 3);
         let mut cache = DistanceMapCache::default();
         let mut rng = SeededRng::new(42);
-        let mut positions = vec![
-            IVec2::new(0, 2), IVec2::new(4, 2), IVec2::new(2, 0),
-        ];
-        let goals = vec![
-            IVec2::new(4, 2), IVec2::new(0, 2), IVec2::new(2, 4),
-        ];
+        let mut positions = vec![IVec2::new(0, 2), IVec2::new(4, 2), IVec2::new(2, 0)];
+        let goals = vec![IVec2::new(4, 2), IVec2::new(0, 2), IVec2::new(2, 4)];
 
         for tick in 0..50 {
             let agents: Vec<AgentState> = (0..3)
                 .map(|i| AgentState {
-                    index: i, pos: positions[i], goal: Some(goals[i]),
-                    has_plan: tick > 0, task_leg: TaskLeg::TravelEmpty(goals[i]),
+                    index: i,
+                    pos: positions[i],
+                    goal: Some(goals[i]),
+                    has_plan: tick > 0,
+                    task_leg: TaskLeg::TravelEmpty(goals[i]),
                 })
                 .collect();
 
@@ -1071,7 +1103,9 @@ mod tests {
                 _ => {}
             }
 
-            if pos == goal { break; }
+            if pos == goal {
+                break;
+            }
         }
 
         // The search must have found and then cleared the goal_node at least

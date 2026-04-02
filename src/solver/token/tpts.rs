@@ -37,10 +37,10 @@ use crate::core::grid::GridMap;
 use crate::core::seed::SeededRng;
 use crate::core::task::TaskLeg;
 
-use crate::solver::shared::astar::{SpacetimeGrid, spacetime_astar_fast};
-use crate::solver::shared::heuristics::{manhattan, DistanceMapCache};
-use crate::solver::lifelong::{AgentPlan, AgentState, LifelongSolver, SolverContext, StepResult};
 use super::common::{MasterConstraintIndex, Token};
+use crate::solver::lifelong::{AgentPlan, AgentState, LifelongSolver, SolverContext, StepResult};
+use crate::solver::shared::astar::{SpacetimeGrid, spacetime_astar_fast};
+use crate::solver::shared::heuristics::{DistanceMapCache, manhattan};
 use crate::solver::shared::traits::{Optimality, Scalability, SolverInfo};
 
 use crate::constants::{
@@ -153,11 +153,7 @@ impl TptsSolver {
     fn ensure_initialized(&mut self, agents: &[AgentState]) {
         let same_set = self.initialized
             && self.last_agent_indices.len() == agents.len()
-            && self
-                .last_agent_indices
-                .iter()
-                .zip(agents.iter())
-                .all(|(&a, b)| a == b.index);
+            && self.last_agent_indices.iter().zip(agents.iter()).all(|(&a, b)| a == b.index);
         if same_set {
             return;
         }
@@ -181,8 +177,7 @@ impl TptsSolver {
         }
 
         self.last_agent_indices.clear();
-        self.last_agent_indices
-            .extend(agents.iter().map(|a| a.index));
+        self.last_agent_indices.extend(agents.iter().map(|a| a.index));
         self.initialized = true;
     }
 
@@ -204,9 +199,17 @@ impl TptsSolver {
         let dm = maps[0];
 
         let actions = spacetime_astar_fast(
-            grid, start, goal, &self.master_ci, TOKEN_ASTAR_MAX_TIME,
-            Some(dm), &mut self.stg, ASTAR_MAX_EXPANSIONS, None,
-        ).ok()?;
+            grid,
+            start,
+            goal,
+            &self.master_ci,
+            TOKEN_ASTAR_MAX_TIME,
+            Some(dm),
+            &mut self.stg,
+            ASTAR_MAX_EXPANSIONS,
+            None,
+        )
+        .ok()?;
 
         let mut positions = Vec::with_capacity(actions.len() + 1);
         positions.push(start);
@@ -232,7 +235,7 @@ impl TptsSolver {
             return Some(0);
         }
         let path = self.plan_path(start, goal, grid, dist_cache)?;
-        Some((path.len() - 1) as u64)  // path length = number of steps
+        Some((path.len() - 1) as u64) // path length = number of steps
     }
 
     /// Attempt swaps with snapshot/restore (paper Algorithm 2, lines 20-33).
@@ -251,8 +254,7 @@ impl TptsSolver {
         dist_cache: &mut DistanceMapCache,
     ) -> Vec<(usize, usize)> {
         // Clean up stale cooldown entries
-        self.swap_cooldown
-            .retain(|_, cooldown_tick| tick < *cooldown_tick + TPTS_SWAP_COOLDOWN);
+        self.swap_cooldown.retain(|_, cooldown_tick| tick < *cooldown_tick + TPTS_SWAP_COOLDOWN);
 
         let mut committed_swaps = Vec::new();
         let mut checks = 0;
@@ -298,10 +300,8 @@ impl TptsSolver {
                 // Manhattan pre-filter: skip A* if Manhattan says swap is
                 // clearly not beneficial. This avoids 4 expensive A* calls
                 // for pairs that can't possibly improve.
-                let m_current = manhattan(agents[i].pos, goal_i)
-                    + manhattan(agents[j].pos, goal_j);
-                let m_swapped = manhattan(agents[i].pos, goal_j)
-                    + manhattan(agents[j].pos, goal_i);
+                let m_current = manhattan(agents[i].pos, goal_i) + manhattan(agents[j].pos, goal_j);
+                let m_swapped = manhattan(agents[i].pos, goal_j) + manhattan(agents[j].pos, goal_i);
                 if m_swapped >= m_current {
                     continue; // Manhattan says no benefit — skip A*
                 }
@@ -421,8 +421,7 @@ impl LifelongSolver for TptsSolver {
             optimality: Optimality::Suboptimal,
             complexity: "O(n × A* + swap_checks × A*) per replan",
             scalability: Scalability::Medium,
-            description:
-                "TPTS — Token Passing with Task Swaps. A* cost swap evaluation with snapshot/restore.",
+            description: "TPTS — Token Passing with Task Swaps. A* cost swap evaluation with snapshot/restore.",
             source: "Ma et al., AAMAS 2017",
             recommended_max_agents: Some(100),
         }
@@ -481,8 +480,7 @@ impl LifelongSolver for TptsSolver {
         });
 
         // Build master constraint index
-        self.master_ci
-            .reset(ctx.grid.width, ctx.grid.height, TOKEN_PATH_MAX_TIME);
+        self.master_ci.reset(ctx.grid.width, ctx.grid.height, TOKEN_PATH_MAX_TIME);
         for path in &self.token.paths {
             self.master_ci.add_path(path, TOKEN_PATH_MAX_TIME);
         }
@@ -492,13 +490,17 @@ impl LifelongSolver for TptsSolver {
         let committed_swaps = self.attempt_swaps(agents, ctx.tick, ctx.grid, distance_cache);
 
         // Build swapped goals from persistent overrides + this tick's new swaps
-        let mut swapped_goals: Vec<Option<IVec2>> = agents.iter().map(|a| {
-            if let Some(&override_goal) = self.swap_goal_overrides.get(&a.index) {
-                Some(override_goal)
-            } else {
-                a.goal
-            }
-        }).collect();
+        let mut swapped_goals: Vec<Option<IVec2>> = agents
+            .iter()
+            .map(|a| {
+                if let Some(&override_goal) = self.swap_goal_overrides.get(&a.index) {
+                    Some(override_goal)
+                } else {
+                    a.goal
+                }
+            })
+            .collect();
+        #[allow(clippy::manual_swap)]
         for &(i, j) in &committed_swaps {
             let tmp = swapped_goals[i];
             swapped_goals[i] = swapped_goals[j];
@@ -533,9 +535,8 @@ impl LifelongSolver for TptsSolver {
             };
 
             let goal = swapped_goals[agent_idx];
-            let needs_plan = self.token.paths[local].len() <= 1
-                && goal.is_some()
-                && a.pos != goal.unwrap();
+            let needs_plan =
+                self.token.paths[local].len() <= 1 && goal.is_some() && a.pos != goal.unwrap();
 
             if !needs_plan {
                 continue;
@@ -613,9 +614,7 @@ mod tests {
         let mut solver = TptsSolver::new();
         let mut cache = DistanceMapCache::default();
         let mut rng = SeededRng::new(42);
-        let ctx = SolverContext {
-            grid: &grid, zones: &zones, tick: 0, num_agents: 0,
-        };
+        let ctx = SolverContext { grid: &grid, zones: &zones, tick: 0, num_agents: 0 };
         let result = solver.step(&ctx, &[], &mut cache, &mut rng);
         assert!(matches!(result, StepResult::Replan(plans) if plans.is_empty()));
     }
@@ -632,7 +631,10 @@ mod tests {
 
         for tick in 0..20 {
             let agents = vec![AgentState {
-                index: 0, pos, goal: Some(goal), has_plan: tick > 0,
+                index: 0,
+                pos,
+                goal: Some(goal),
+                has_plan: tick > 0,
                 task_leg: TaskLeg::TravelEmpty(goal),
             }];
             let ctx = SolverContext { grid: &grid, zones: &zones, tick, num_agents: 1 };
@@ -643,7 +645,9 @@ mod tests {
                     }
                 }
             }
-            if pos == goal { return; }
+            if pos == goal {
+                return;
+            }
         }
         assert_eq!(pos, goal);
     }
@@ -662,12 +666,18 @@ mod tests {
 
         let agents = vec![
             AgentState {
-                index: 0, pos: IVec2::new(0, 0), goal: Some(IVec2::new(4, 0)),
-                has_plan: false, task_leg: TaskLeg::TravelEmpty(IVec2::new(4, 0)),
+                index: 0,
+                pos: IVec2::new(0, 0),
+                goal: Some(IVec2::new(4, 0)),
+                has_plan: false,
+                task_leg: TaskLeg::TravelEmpty(IVec2::new(4, 0)),
             },
             AgentState {
-                index: 1, pos: IVec2::new(3, 0), goal: Some(IVec2::new(1, 0)),
-                has_plan: false, task_leg: TaskLeg::TravelEmpty(IVec2::new(1, 0)),
+                index: 1,
+                pos: IVec2::new(3, 0),
+                goal: Some(IVec2::new(1, 0)),
+                has_plan: false,
+                task_leg: TaskLeg::TravelEmpty(IVec2::new(1, 0)),
             },
         ];
 
@@ -687,12 +697,18 @@ mod tests {
         let mut solver = TptsSolver::new();
         let agents = vec![
             AgentState {
-                index: 0, pos: IVec2::new(0, 0), goal: Some(IVec2::new(4, 0)),
-                has_plan: false, task_leg: TaskLeg::TravelEmpty(IVec2::new(4, 0)),
+                index: 0,
+                pos: IVec2::new(0, 0),
+                goal: Some(IVec2::new(4, 0)),
+                has_plan: false,
+                task_leg: TaskLeg::TravelEmpty(IVec2::new(4, 0)),
             },
             AgentState {
-                index: 1, pos: IVec2::new(3, 0), goal: Some(IVec2::new(1, 0)),
-                has_plan: false, task_leg: TaskLeg::Free, // Incompatible
+                index: 1,
+                pos: IVec2::new(3, 0),
+                goal: Some(IVec2::new(1, 0)),
+                has_plan: false,
+                task_leg: TaskLeg::Free, // Incompatible
             },
         ];
 
@@ -719,12 +735,18 @@ mod tests {
 
         let agents = vec![
             AgentState {
-                index: 0, pos: IVec2::new(0, 0), goal: Some(IVec2::new(4, 0)),
-                has_plan: false, task_leg: TaskLeg::TravelEmpty(IVec2::new(4, 0)),
+                index: 0,
+                pos: IVec2::new(0, 0),
+                goal: Some(IVec2::new(4, 0)),
+                has_plan: false,
+                task_leg: TaskLeg::TravelEmpty(IVec2::new(4, 0)),
             },
             AgentState {
-                index: 1, pos: IVec2::new(3, 0), goal: Some(IVec2::new(1, 0)),
-                has_plan: false, task_leg: TaskLeg::TravelEmpty(IVec2::new(1, 0)),
+                index: 1,
+                pos: IVec2::new(3, 0),
+                goal: Some(IVec2::new(1, 0)),
+                has_plan: false,
+                task_leg: TaskLeg::TravelEmpty(IVec2::new(1, 0)),
             },
         ];
 
@@ -788,8 +810,11 @@ mod tests {
         for tick in 0..30 {
             let agents: Vec<AgentState> = (0..2)
                 .map(|i| AgentState {
-                    index: i, pos: positions[i], goal: Some(goals[i]),
-                    has_plan: tick > 0, task_leg: TaskLeg::TravelEmpty(goals[i]),
+                    index: i,
+                    pos: positions[i],
+                    goal: Some(goals[i]),
+                    has_plan: tick > 0,
+                    task_leg: TaskLeg::TravelEmpty(goals[i]),
                 })
                 .collect();
 
@@ -820,12 +845,18 @@ mod tests {
         // Agent 0 far from its goal, Agent 1 close to Agent 0's goal
         let agents = vec![
             AgentState {
-                index: 0, pos: IVec2::new(0, 0), goal: Some(IVec2::new(7, 0)),
-                has_plan: false, task_leg: TaskLeg::TravelEmpty(IVec2::new(7, 0)),
+                index: 0,
+                pos: IVec2::new(0, 0),
+                goal: Some(IVec2::new(7, 0)),
+                has_plan: false,
+                task_leg: TaskLeg::TravelEmpty(IVec2::new(7, 0)),
             },
             AgentState {
-                index: 1, pos: IVec2::new(6, 0), goal: Some(IVec2::new(1, 0)),
-                has_plan: false, task_leg: TaskLeg::TravelEmpty(IVec2::new(1, 0)),
+                index: 1,
+                pos: IVec2::new(6, 0),
+                goal: Some(IVec2::new(1, 0)),
+                has_plan: false,
+                task_leg: TaskLeg::TravelEmpty(IVec2::new(1, 0)),
             },
         ];
 
@@ -867,33 +898,33 @@ mod tests {
         let mut cache = DistanceMapCache::default();
         let mut rng = SeededRng::new(42);
 
-        let mut positions = vec![
-            IVec2::new(0, 0), IVec2::new(6, 0), IVec2::new(3, 3),
-        ];
-        let goals = vec![
-            IVec2::new(7, 0), IVec2::new(1, 0), IVec2::new(5, 5),
-        ];
+        let mut positions = vec![IVec2::new(0, 0), IVec2::new(6, 0), IVec2::new(3, 3)];
+        let goals = vec![IVec2::new(7, 0), IVec2::new(1, 0), IVec2::new(5, 5)];
 
         for tick in 0..20 {
             let agents: Vec<AgentState> = (0..3)
                 .map(|i| AgentState {
-                    index: i, pos: positions[i], goal: Some(goals[i]),
-                    has_plan: tick > 0, task_leg: TaskLeg::TravelEmpty(goals[i]),
+                    index: i,
+                    pos: positions[i],
+                    goal: Some(goals[i]),
+                    has_plan: tick > 0,
+                    task_leg: TaskLeg::TravelEmpty(goals[i]),
                 })
                 .collect();
 
             let ctx = SolverContext { grid: &grid, zones: &zones, tick, num_agents: 3 };
             if let StepResult::Replan(plans) = solver.step(&ctx, &agents, &mut cache, &mut rng) {
                 // After step, verify no two agents in the plan share the same position
-                let plan_positions: Vec<IVec2> = plans.iter()
-                    .filter_map(|(idx, actions)| {
-                        actions.first().map(|a| a.apply(positions[*idx]))
-                    })
+                let plan_positions: Vec<IVec2> = plans
+                    .iter()
+                    .filter_map(|(idx, actions)| actions.first().map(|a| a.apply(positions[*idx])))
                     .collect();
 
-                let unique: std::collections::HashSet<IVec2> = plan_positions.iter().copied().collect();
+                let unique: std::collections::HashSet<IVec2> =
+                    plan_positions.iter().copied().collect();
                 assert_eq!(
-                    unique.len(), plan_positions.len(),
+                    unique.len(),
+                    plan_positions.len(),
                     "swap produced duplicate target positions at tick {tick}"
                 );
 
@@ -987,12 +1018,18 @@ mod tests {
 
         let agents = vec![
             AgentState {
-                index: 0, pos: IVec2::new(0, 0), goal: Some(IVec2::new(4, 0)),
-                has_plan: false, task_leg: TaskLeg::TravelEmpty(IVec2::new(4, 0)),
+                index: 0,
+                pos: IVec2::new(0, 0),
+                goal: Some(IVec2::new(4, 0)),
+                has_plan: false,
+                task_leg: TaskLeg::TravelEmpty(IVec2::new(4, 0)),
             },
             AgentState {
-                index: 1, pos: IVec2::new(4, 0), goal: Some(IVec2::new(0, 0)),
-                has_plan: false, task_leg: TaskLeg::Free, // incompatible → swap will be skipped
+                index: 1,
+                pos: IVec2::new(4, 0),
+                goal: Some(IVec2::new(0, 0)),
+                has_plan: false,
+                task_leg: TaskLeg::Free, // incompatible → swap will be skipped
             },
         ];
 
@@ -1003,18 +1040,16 @@ mod tests {
         }
 
         // Save token state before
-        let paths_before: Vec<Vec<IVec2>> = solver.token.paths.iter()
-            .map(|p| p.iter().copied().collect())
-            .collect();
+        let paths_before: Vec<Vec<IVec2>> =
+            solver.token.paths.iter().map(|p| p.iter().copied().collect()).collect();
 
         // attempt_swaps should not modify anything (incompatible legs)
         let swaps = solver.attempt_swaps(&agents, 0, &grid, &mut cache);
         assert!(swaps.is_empty());
 
         // Token paths should be unchanged
-        let paths_after: Vec<Vec<IVec2>> = solver.token.paths.iter()
-            .map(|p| p.iter().copied().collect())
-            .collect();
+        let paths_after: Vec<Vec<IVec2>> =
+            solver.token.paths.iter().map(|p| p.iter().copied().collect()).collect();
         assert_eq!(paths_before, paths_after, "token paths changed despite no swap");
     }
 }

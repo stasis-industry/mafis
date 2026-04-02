@@ -6,11 +6,11 @@ use crate::experiment::export::MetricColumn;
 use crate::experiment::runner::MatrixResult;
 use crate::solver::SOLVER_NAMES;
 
-use super::{ExperimentCommand, ExperimentGuiState, ExperimentHandle, SortColumn};
 use super::helpers::{
-    PRESETS, TABLE_METRICS, export_button, metric_zone_color, sortable_header, sync_topologies,
-    ExportFormat,
+    ExportFormat, PRESETS, TABLE_METRICS, export_button, metric_zone_color, sortable_header,
+    sync_topologies,
 };
+use super::{ExperimentCommand, ExperimentGuiState, ExperimentHandle, SortColumn};
 
 pub fn experiment_panel(
     ui: &mut egui::Ui,
@@ -23,7 +23,7 @@ pub fn experiment_panel(
     sync_topologies(gui, registry);
 
     // Check if running
-    let is_done = handle.as_ref().map_or(true, |h| h.done.load(Ordering::Acquire));
+    let is_done = handle.as_ref().is_none_or(|h| h.done.load(Ordering::Acquire));
 
     if !is_done {
         let h = handle.unwrap();

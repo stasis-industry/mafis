@@ -6,11 +6,11 @@ use crate::experiment::export::MetricColumn;
 use crate::experiment::runner::MatrixResult;
 use crate::solver::SOLVER_NAMES;
 
-use super::{ExperimentCommand, ExperimentGuiState, ExperimentHandle, ExpStage, SortColumn};
 use super::helpers::{
-    PRESETS, TABLE_METRICS, export_button, metric_zone_color, sortable_header, sync_topologies,
-    ExportFormat,
+    ExportFormat, PRESETS, TABLE_METRICS, export_button, metric_zone_color, sortable_header,
+    sync_topologies,
 };
+use super::{ExpStage, ExperimentCommand, ExperimentGuiState, ExperimentHandle, SortColumn};
 
 pub fn experiment_fullpage_panel(
     ui: &mut egui::Ui,
@@ -163,7 +163,7 @@ fn fullpage_config(
 
                         // Action buttons
                         right.horizontal(|ui| {
-                            if ui.button(format!("RUN EXPERIMENT")).clicked() {
+                            if ui.button("RUN EXPERIMENT").clicked() {
                                 commands.push(ExperimentCommand::Launch(matrix));
                                 gui.stage = ExpStage::Running;
                             }

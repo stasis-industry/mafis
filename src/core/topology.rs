@@ -485,7 +485,7 @@ pub fn parse_movingai_map(text: &str) -> Option<(GridMap, ZoneMap)> {
             }
             // '.' and 'G' are walkable. Everything else is obstacle.
             if ch != '.' && ch != 'G' {
-                obstacles.insert(IVec2::new(x as i32, y as i32));
+                obstacles.insert(IVec2::new(x as i32, y));
             }
         }
     }

@@ -10,10 +10,12 @@ use crate::core::action::Action;
 use crate::core::grid::GridMap;
 use crate::core::seed::SeededRng;
 
-use crate::solver::shared::astar::{Constraints, FlatCAT, FlatConstraintIndex, SpacetimeGrid, SeqGoalGrid,
-    spacetime_astar_guided, spacetime_astar_fast, spacetime_astar_sequential};
-use crate::solver::shared::heuristics::DistanceMap;
 use super::windowed::{PlanFragment, WindowAgent, WindowContext, WindowResult, WindowedPlanner};
+use crate::solver::shared::astar::{
+    Constraints, FlatCAT, FlatConstraintIndex, SeqGoalGrid, SpacetimeGrid, spacetime_astar_fast,
+    spacetime_astar_guided, spacetime_astar_sequential,
+};
+use crate::solver::shared::heuristics::DistanceMap;
 
 // ---------------------------------------------------------------------------
 // PBS Node
@@ -34,7 +36,6 @@ struct PbsNode {
     /// Node ID for tie-breaking (lower = earlier).
     id: usize,
 }
-
 
 // ---------------------------------------------------------------------------
 // Spatial conflict detection — O(n × H) replacing O(n² × H)
@@ -61,11 +62,7 @@ struct ConflictGrid {
 
 impl ConflictGrid {
     fn new() -> Self {
-        Self {
-            cur: Vec::new(),
-            prev: Vec::new(),
-            cells: 0,
-        }
+        Self { cur: Vec::new(), prev: Vec::new(), cells: 0 }
     }
 
     fn ensure_size(&mut self, cells: usize) {
@@ -76,7 +73,12 @@ impl ConflictGrid {
         }
     }
 
-    fn detect_first(&mut self, timelines: &[Vec<IVec2>], grid_w: i32, window: usize) -> Option<Conflict> {
+    fn detect_first(
+        &mut self,
+        timelines: &[Vec<IVec2>],
+        grid_w: i32,
+        window: usize,
+    ) -> Option<Conflict> {
         let n = timelines.len();
         if n < 2 {
             return None;
@@ -216,7 +218,12 @@ fn build_timelines(plans: &[Vec<Action>], agents: &[WindowAgent]) -> Vec<Vec<IVe
 }
 
 /// Rebuild a single agent's timeline in-place.
-fn rebuild_timeline(timelines: &mut [Vec<IVec2>], plans: &[Vec<Action>], agents: &[WindowAgent], idx: usize) {
+fn rebuild_timeline(
+    timelines: &mut [Vec<IVec2>],
+    plans: &[Vec<Action>],
+    agents: &[WindowAgent],
+    idx: usize,
+) {
     let plan = &plans[idx];
     let tl = &mut timelines[idx];
     tl.clear();
@@ -230,11 +237,7 @@ fn rebuild_timeline(timelines: &mut [Vec<IVec2>], plans: &[Vec<Action>], agents:
 
 #[inline]
 fn pos_at(timeline: &[IVec2], t: usize) -> IVec2 {
-    if t < timeline.len() {
-        timeline[t]
-    } else {
-        *timeline.last().unwrap()
-    }
+    if t < timeline.len() { timeline[t] } else { *timeline.last().unwrap() }
 }
 
 // ---------------------------------------------------------------------------
@@ -336,11 +339,7 @@ impl WindowedPlanner for PbsPlanner {
         "pbs"
     }
 
-    fn plan_window(
-        &mut self,
-        ctx: &WindowContext,
-        _rng: &mut SeededRng,
-    ) -> WindowResult {
+    fn plan_window(&mut self, ctx: &WindowContext, _rng: &mut SeededRng) -> WindowResult {
         let n = ctx.agents.len();
         if n == 0 {
             return WindowResult::Solved(Vec::new());
@@ -367,15 +366,22 @@ impl WindowedPlanner for PbsPlanner {
             let agent = &ctx.agents[i];
             let plan = if agent.goal_sequence.is_empty() {
                 spacetime_astar_guided(
-                    ctx.grid, agent.pos, agent.goal, i,
-                    &Constraints::new(), ctx.horizon as u64,
+                    ctx.grid,
+                    agent.pos,
+                    agent.goal,
+                    i,
+                    &Constraints::new(),
+                    ctx.horizon as u64,
                     Some(ctx.distance_maps[i]),
                 )
             } else {
-                let seq_dms: Vec<DistanceMap> = agent.goal_sequence.iter()
+                let seq_dms: Vec<DistanceMap> = agent
+                    .goal_sequence
+                    .iter()
                     .map(|&g| DistanceMap::compute(ctx.grid, g))
                     .collect();
-                let mut goals: Vec<(IVec2, &DistanceMap)> = vec![(agent.goal, ctx.distance_maps[i])];
+                let mut goals: Vec<(IVec2, &DistanceMap)> =
+                    vec![(agent.goal, ctx.distance_maps[i])];
                 for (j, &g) in agent.goal_sequence.iter().enumerate() {
                     goals.push((g, &seq_dms[j]));
                 }
@@ -384,16 +390,27 @@ impl WindowedPlanner for PbsPlanner {
                 let mut plan_result = Err(crate::solver::shared::traits::SolverError::NoSolution);
                 while goals.len() > 1 {
                     plan_result = spacetime_astar_sequential(
-                        ctx.grid, agent.pos, &goals, &self.empty_ci,
-                        ctx.horizon as u64, &mut self.seq_stg, u64::MAX,
+                        ctx.grid,
+                        agent.pos,
+                        &goals,
+                        &self.empty_ci,
+                        ctx.horizon as u64,
+                        &mut self.seq_stg,
+                        u64::MAX,
                     );
-                    if plan_result.is_ok() { break; }
+                    if plan_result.is_ok() {
+                        break;
+                    }
                     goals.pop();
                 }
                 if plan_result.is_err() {
                     plan_result = spacetime_astar_guided(
-                        ctx.grid, agent.pos, agent.goal, i,
-                        &Constraints::new(), ctx.horizon as u64,
+                        ctx.grid,
+                        agent.pos,
+                        agent.goal,
+                        i,
+                        &Constraints::new(),
+                        ctx.horizon as u64,
                         Some(ctx.distance_maps[i]),
                     );
                 }
@@ -420,8 +437,11 @@ impl WindowedPlanner for PbsPlanner {
         let mut best_node: Option<PbsNode> = None;
 
         // Build root node with earliest_collision
-        let root_conflicts = self.conflict_grid.count_conflicts(&initial_timelines, ctx.grid.width, ctx.horizon);
-        let root_earliest = self.conflict_grid.detect_first(&initial_timelines, ctx.grid.width, ctx.horizon)
+        let root_conflicts =
+            self.conflict_grid.count_conflicts(&initial_timelines, ctx.grid.width, ctx.horizon);
+        let root_earliest = self
+            .conflict_grid
+            .detect_first(&initial_timelines, ctx.grid.width, ctx.horizon)
             .map(|c| c.time as usize)
             .unwrap_or(usize::MAX);
 
@@ -443,8 +463,11 @@ impl WindowedPlanner for PbsPlanner {
 
             // Update best node (prefer later earliest_collision, tie-break on fewer conflicts)
             let dominated = match &best_node {
-                Some(bn) => node.earliest_collision > bn.earliest_collision
-                    || (node.earliest_collision == bn.earliest_collision && node.conflicts < bn.conflicts),
+                Some(bn) => {
+                    node.earliest_collision > bn.earliest_collision
+                        || (node.earliest_collision == bn.earliest_collision
+                            && node.conflicts < bn.conflicts)
+                }
                 None => true,
             };
             if dominated {
@@ -458,26 +481,49 @@ impl WindowedPlanner for PbsPlanner {
                 });
             }
 
-            if let Some(conflict) = self.conflict_grid.detect_first(&node.timelines, ctx.grid.width, ctx.horizon) {
+            if let Some(conflict) =
+                self.conflict_grid.detect_first(&node.timelines, ctx.grid.width, ctx.horizon)
+            {
                 let child1 = try_branch(
-                    &node, conflict.agent_a, conflict.agent_b,
-                    ctx.agents, ctx.grid, ctx.horizon, ctx.distance_maps,
-                    &mut self.ci_buf, &mut self.stg,
-                    &ctx.start_constraints, &self.cat,
+                    &node,
+                    conflict.agent_a,
+                    conflict.agent_b,
+                    ctx.agents,
+                    ctx.grid,
+                    ctx.horizon,
+                    ctx.distance_maps,
+                    &mut self.ci_buf,
+                    &mut self.stg,
+                    &ctx.start_constraints,
+                    &self.cat,
                 );
                 let child2 = try_branch(
-                    &node, conflict.agent_b, conflict.agent_a,
-                    ctx.agents, ctx.grid, ctx.horizon, ctx.distance_maps,
-                    &mut self.ci_buf, &mut self.stg,
-                    &ctx.start_constraints, &self.cat,
+                    &node,
+                    conflict.agent_b,
+                    conflict.agent_a,
+                    ctx.agents,
+                    ctx.grid,
+                    ctx.horizon,
+                    ctx.distance_maps,
+                    &mut self.ci_buf,
+                    &mut self.stg,
+                    &ctx.start_constraints,
+                    &self.cat,
                 );
 
                 // Push worse child first, better child second (better popped first in DFS)
                 let mut children: Vec<PbsNode> = Vec::new();
+                #[allow(clippy::manual_flatten)]
                 for child_opt in [child1, child2] {
                     if let Some(mut child) = child_opt {
-                        let c_conflicts = self.conflict_grid.count_conflicts(&child.timelines, ctx.grid.width, ctx.horizon);
-                        let c_earliest = self.conflict_grid.detect_first(&child.timelines, ctx.grid.width, ctx.horizon)
+                        let c_conflicts = self.conflict_grid.count_conflicts(
+                            &child.timelines,
+                            ctx.grid.width,
+                            ctx.horizon,
+                        );
+                        let c_earliest = self
+                            .conflict_grid
+                            .detect_first(&child.timelines, ctx.grid.width, ctx.horizon)
                             .map(|c| c.time as usize)
                             .unwrap_or(usize::MAX);
                         child.conflicts = c_conflicts;
@@ -490,7 +536,8 @@ impl WindowedPlanner for PbsPlanner {
 
                 // Sort: worse first (bottom of stack), better second (top = explored first)
                 children.sort_by(|a, b| {
-                    a.conflicts.cmp(&b.conflicts)
+                    a.conflicts
+                        .cmp(&b.conflicts)
                         .then_with(|| a.earliest_collision.cmp(&b.earliest_collision).reverse())
                 });
                 for child in children {
@@ -555,7 +602,19 @@ fn try_branch(
     let mut new_plans = parent.plans.clone();
 
     let dm = distance_maps.get(lower).copied();
-    if let Some(new_plan) = plan_agent(lower, agents, &new_plans, &new_pairs, grid, horizon, dm, ci_buf, stg, start_constraints, Some(cat)) {
+    if let Some(new_plan) = plan_agent(
+        lower,
+        agents,
+        &new_plans,
+        &new_pairs,
+        grid,
+        horizon,
+        dm,
+        ci_buf,
+        stg,
+        start_constraints,
+        Some(cat),
+    ) {
         new_plans[lower] = new_plan;
         let mut new_timelines = parent.timelines.clone();
         rebuild_timeline(&mut new_timelines, &new_plans, agents, lower);
@@ -609,10 +668,10 @@ fn to_partial_result(plans: Vec<Vec<Action>>, agents: &[WindowAgent]) -> WindowR
 #[cfg(test)]
 mod tests {
     use super::*;
-    use smallvec::SmallVec;
     use crate::core::grid::GridMap;
     use crate::core::seed::SeededRng;
     use crate::solver::shared::heuristics::DistanceMap;
+    use smallvec::SmallVec;
 
     fn make_ctx<'a>(
         grid: &'a GridMap,
@@ -668,7 +727,12 @@ mod tests {
     #[test]
     fn pbs_single_agent_reaches_goal() {
         let grid = GridMap::new(5, 5);
-        let agents = vec![WindowAgent { index: 0, pos: IVec2::ZERO, goal: IVec2::new(4, 4), goal_sequence: SmallVec::new() }];
+        let agents = vec![WindowAgent {
+            index: 0,
+            pos: IVec2::ZERO,
+            goal: IVec2::new(4, 4),
+            goal_sequence: SmallVec::new(),
+        }];
         let dm = DistanceMap::compute(&grid, IVec2::new(4, 4));
         let dist_maps: Vec<&DistanceMap> = vec![&dm];
         let ctx = make_ctx(&grid, &agents, &dist_maps);
@@ -688,8 +752,18 @@ mod tests {
     fn pbs_two_agents_no_conflict() {
         let grid = GridMap::new(5, 5);
         let agents = vec![
-            WindowAgent { index: 0, pos: IVec2::new(0, 0), goal: IVec2::new(4, 0), goal_sequence: SmallVec::new() },
-            WindowAgent { index: 1, pos: IVec2::new(0, 4), goal: IVec2::new(4, 4), goal_sequence: SmallVec::new() },
+            WindowAgent {
+                index: 0,
+                pos: IVec2::new(0, 0),
+                goal: IVec2::new(4, 0),
+                goal_sequence: SmallVec::new(),
+            },
+            WindowAgent {
+                index: 1,
+                pos: IVec2::new(0, 4),
+                goal: IVec2::new(4, 4),
+                goal_sequence: SmallVec::new(),
+            },
         ];
         let dm0 = DistanceMap::compute(&grid, IVec2::new(4, 0));
         let dm1 = DistanceMap::compute(&grid, IVec2::new(4, 4));
@@ -745,8 +819,18 @@ mod tests {
     fn pbs_finds_solution_with_tight_node_limit() {
         let grid = GridMap::new(5, 5);
         let agents = vec![
-            WindowAgent { index: 0, pos: IVec2::new(0, 2), goal: IVec2::new(4, 2), goal_sequence: SmallVec::new() },
-            WindowAgent { index: 1, pos: IVec2::new(4, 2), goal: IVec2::new(0, 2), goal_sequence: SmallVec::new() },
+            WindowAgent {
+                index: 0,
+                pos: IVec2::new(0, 2),
+                goal: IVec2::new(4, 2),
+                goal_sequence: SmallVec::new(),
+            },
+            WindowAgent {
+                index: 1,
+                pos: IVec2::new(4, 2),
+                goal: IVec2::new(0, 2),
+                goal_sequence: SmallVec::new(),
+            },
         ];
         let dm0 = DistanceMap::compute(&grid, IVec2::new(4, 2));
         let dm1 = DistanceMap::compute(&grid, IVec2::new(0, 2));
@@ -764,8 +848,10 @@ mod tests {
         let mut planner = PbsPlanner::new();
         let mut rng = SeededRng::new(42);
         let result = planner.plan_window(&ctx, &mut rng);
-        assert!(matches!(result, WindowResult::Solved(_)),
-            "DFS should solve 2 crossing agents within 6 nodes");
+        assert!(
+            matches!(result, WindowResult::Solved(_)),
+            "DFS should solve 2 crossing agents within 6 nodes"
+        );
     }
 
     #[test]
@@ -775,8 +861,8 @@ mod tests {
 
         // Two agents that collide at t=2 (both at position (2,0))
         let timelines = vec![
-            vec![IVec2::new(0,0), IVec2::new(1,0), IVec2::new(2,0)],
-            vec![IVec2::new(4,0), IVec2::new(3,0), IVec2::new(2,0)],
+            vec![IVec2::new(0, 0), IVec2::new(1, 0), IVec2::new(2, 0)],
+            vec![IVec2::new(4, 0), IVec2::new(3, 0), IVec2::new(2, 0)],
         ];
         // Full window: should detect conflict at t=2
         assert!(cg.detect_first(&timelines, 5, usize::MAX).is_some());
