@@ -1,5 +1,3 @@
-#![allow(clippy::too_many_arguments, clippy::type_complexity)]
-
 pub mod analysis;
 pub mod constants;
 pub mod core;
@@ -11,14 +9,12 @@ pub mod render;
 pub mod solver;
 pub mod ui;
 
-#[cfg(feature = "mapf-pilot")]
-pub mod pilot_bridge;
-
 // Headless ECS integration tests. Lives in `src/` (not `tests/`) so that the
-// library is compiled with `cfg(test)` set — required for `#[cfg(not(test))]`
-// guards in AnalysisPlugin and FaultPlugin to exclude render-dependent systems.
+// library is compiled with `cfg(test)` set — required for
+// `#[cfg(not(any(test, feature = "headless")))]` guards in AnalysisPlugin and
+// FaultPlugin to exclude render-dependent systems.
 #[cfg(test)]
-mod sim_tests;
+mod testing;
 
 use bevy::prelude::*;
 
@@ -37,9 +33,5 @@ impl Plugin for MapfFisPlugin {
         // Render + Export only in observatory mode (WASM or non-headless desktop)
         #[cfg(any(target_arch = "wasm32", not(feature = "headless")))]
         app.add_plugins((render::RenderPlugin, export::ExportPlugin));
-
-        #[cfg(feature = "mapf-pilot")]
-        app.add_plugins(pilot_bridge::PilotBridgePlugin);
     }
 }
-
