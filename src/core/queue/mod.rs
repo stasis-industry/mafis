@@ -132,12 +132,7 @@ impl QueueState {
     /// Find the (skip+1)th empty slot index. When `skip=0`, returns the
     /// front-most empty slot (same as the old `first_empty_slot`).
     pub(super) fn nth_empty_slot(&self, skip: usize) -> Option<usize> {
-        self.slots
-            .iter()
-            .enumerate()
-            .filter(|(_, s)| s.is_none())
-            .nth(skip)
-            .map(|(i, _)| i)
+        self.slots.iter().enumerate().filter(|(_, s)| s.is_none()).nth(skip).map(|(i, _)| i)
     }
 
     /// Find the front-most empty slot index.
@@ -578,18 +573,14 @@ impl QueueManager {
         }
 
         for agent_idx in eligible {
-            let decision =
-                policy.choose_queue(agents[agent_idx].pos, queue_lines, &self.queues);
+            let decision = policy.choose_queue(agents[agent_idx].pos, queue_lines, &self.queues);
 
             match decision {
                 QueueDecision::JoinQueue { line_index } => {
                     // Guard: skip if this queue's physical capacity is exhausted
                     // by pending reservations from earlier agents in this tick.
-                    let physical_free = self.queues[line_index]
-                        .slots
-                        .iter()
-                        .filter(|s| s.is_none())
-                        .count();
+                    let physical_free =
+                        self.queues[line_index].slots.iter().filter(|s| s.is_none()).count();
                     if self.queues[line_index].reserved >= physical_free {
                         // Queue logically full from pending reservations — hold
                         continue;
@@ -1054,12 +1045,7 @@ mod tests {
         // All 3 should have DIFFERENT goal cells
         let goals: Vec<IVec2> = agents.iter().map(|a| a.goal).collect();
         let unique: HashSet<IVec2> = goals.iter().copied().collect();
-        assert_eq!(
-            unique.len(),
-            3,
-            "Expected 3 unique goals, got {:?}",
-            goals
-        );
+        assert_eq!(unique.len(), 3, "Expected 3 unique goals, got {:?}", goals);
     }
 
     #[test]
@@ -1080,11 +1066,8 @@ mod tests {
         let pickup = IVec2::new(3, 2);
         let queue_cell = lines[0].cells[0];
         let mut agents = vec![SimAgent::new(queue_cell)];
-        agents[0].task_leg = TaskLeg::TravelToQueue {
-            from: pickup,
-            to: lines[0].delivery_cell,
-            line_index: 0,
-        };
+        agents[0].task_leg =
+            TaskLeg::TravelToQueue { from: pickup, to: lines[0].delivery_cell, line_index: 0 };
         agents[0].pos = queue_cell; // physically at queue cell
 
         let mut changed = Vec::new();
@@ -1114,21 +1097,13 @@ mod tests {
 
         let pickup = IVec2::new(3, 2);
         // Agent 0 in queue 0 slot 0, agent 1 at queue 1's delivery cell (healthy queue)
-        let mut agents = vec![
-            SimAgent::new(lines[0].cells[0]),
-            SimAgent::new(lines[1].delivery_cell),
-        ];
-        agents[0].task_leg = TaskLeg::Queuing {
-            from: pickup,
-            to: lines[0].delivery_cell,
-            line_index: 0,
-        };
+        let mut agents =
+            vec![SimAgent::new(lines[0].cells[0]), SimAgent::new(lines[1].delivery_cell)];
+        agents[0].task_leg =
+            TaskLeg::Queuing { from: pickup, to: lines[0].delivery_cell, line_index: 0 };
         mgr.queues[0].slots[0] = Some(0);
         // Agent 1 is delivering at queue 1 — marks queue 1 as NOT blocked
-        agents[1].task_leg = TaskLeg::TravelLoaded {
-            from: pickup,
-            to: lines[1].delivery_cell,
-        };
+        agents[1].task_leg = TaskLeg::TravelLoaded { from: pickup, to: lines[1].delivery_cell };
         mgr.queues[1].delivery_occupied_by = Some(1);
 
         // Queue 0's delivery cell is blocked (no alive agent there, delivery_occupied_by is None)
