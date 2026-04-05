@@ -2279,10 +2279,10 @@ function renderResultsCharts(heatEnabled) {
             });
             tpSeries = [
                 { label: 'Gap (MVA Live - Baseline)', stroke: 'rgb(143,58,222)', fill: 'rgba(143,58,222,0.1)', width: 2 },
-                { label: 'Zero', stroke: 'rgba(140,140,148,0.4)', width: 1, dash: [4, 4] }
+                { label: 'Baseline', stroke: 'rgba(140,140,148,0.4)', width: 1, dash: [4, 4] }
             ];
             tpData = [d.ticks, gapData, gapData.map(() => 0)];
-            tpLegend = '<span style="color:rgb(143,58,222)">\u2501\u2501</span> Gap (MVA Live \u2212 MVA Baseline) &nbsp; <span style="color:rgba(140,140,148,0.4)">\u2508\u2508</span> Zero';
+            tpLegend = '<span style="color:rgb(143,58,222)">\u2501\u2501</span> Gap (MVA Live \u2212 MVA Baseline) &nbsp; <span style="color:rgba(140,140,148,0.4)">\u2508\u2508</span> Baseline';
         } else {
             // RAW mode: 4 series — per-tick (faint) + MA (bold) + baseline per-tick (faint dashed) + baseline MA (dashed)
             tpSeries = [
@@ -2331,14 +2331,16 @@ function renderResultsCharts(heatEnabled) {
             // NORM mode: ratio line + 1.0 reference
             const normData = d.tasksCumulative.map((v, i) => {
                 const bl = d.baselineTasksCumulative[i];
-                return (bl != null && bl > 0) ? v / bl : null;
+                if (bl == null) return null;
+                if (bl === 0) return (v === 0) ? 1.0 : null;
+                return v / bl;
             });
             taskSeries = [
                 { label: 'Ratio (Live / BL)', stroke: 'rgb(45,160,0)', fill: 'rgba(45,160,0,0.1)', width: 2 },
-                { label: '1.0', stroke: 'rgba(140,140,148,0.4)', width: 1, dash: [4, 4] }
+                { label: 'Baseline', stroke: 'rgba(140,140,148,0.4)', width: 1, dash: [4, 4] }
             ];
             taskData = [d.ticks, normData, normData.map(() => 1.0)];
-            taskLegend = '<span style="color:rgb(45,160,0)">\u2501\u2501</span> Ratio (Live / Baseline) &nbsp; <span style="color:rgba(140,140,148,0.4)">\u2508\u2508</span> 1.0';
+            taskLegend = '<span style="color:rgb(45,160,0)">\u2501\u2501</span> Ratio (Live / Baseline) &nbsp; <span style="color:rgba(140,140,148,0.4)">\u2508\u2508</span> Baseline';
         } else {
             // ABS mode
             taskSeries = [{ label: hasBaseline ? 'Live' : 'Tasks', stroke: 'rgb(45,160,0)', fill: 'rgba(45,160,0,0.1)', width: 2 }];
@@ -3031,7 +3033,7 @@ function updateChartLegends() {
     const tpLegend = document.querySelector('#chart-throughput .chart-legend');
     if (tpLegend) {
         if (throughputChartMode === 'gap') {
-            tpLegend.innerHTML = '<span style="color:rgb(143,58,222)">\u2501\u2501</span> Gap (MVA Live \u2212 MVA Baseline) &nbsp; <span style="color:rgba(140,140,148,0.4)">\u2508\u2508</span> Zero';
+            tpLegend.innerHTML = '<span style="color:rgb(143,58,222)">\u2501\u2501</span> Gap (MVA Live \u2212 MVA Baseline) &nbsp; <span style="color:rgba(140,140,148,0.4)">\u2508\u2508</span> Baseline';
         } else if (hasFaults) {
             tpLegend.innerHTML = '<span style="color:rgba(143,58,222,0.3)">\u2501\u2501</span> Per-Tick &nbsp; <span style="color:rgb(143,58,222)">\u2501\u2501</span> MVA (Live) &nbsp; <span style="color:rgba(140,140,148,0.6)">\u2508\u2508</span> MVA (Baseline)';
         } else {
@@ -3041,7 +3043,7 @@ function updateChartLegends() {
     const taskLegend = document.querySelector('#chart-tasks .chart-legend');
     if (taskLegend) {
         if (tasksChartMode === 'norm') {
-            taskLegend.innerHTML = '<span style="color:rgb(45,160,0)">\u2501\u2501</span> Ratio (Live / Baseline) &nbsp; <span style="color:rgba(140,140,148,0.4)">\u2508\u2508</span> 1.0';
+            taskLegend.innerHTML = '<span style="color:rgb(45,160,0)">\u2501\u2501</span> Ratio (Live / Baseline) &nbsp; <span style="color:rgba(140,140,148,0.4)">\u2508\u2508</span> Baseline';
         } else if (hasFaults) {
             taskLegend.innerHTML = '<span style="color:rgb(45,160,0)">\u2501\u2501</span> Live &nbsp; <span style="color:rgba(140,140,148,0.6)">\u2508\u2508</span> Baseline';
         } else {
@@ -3075,7 +3077,9 @@ function redrawChartsForMode() {
         if (tasksChartMode === 'norm' && _lastShowBaseline) {
             const normData = chartData.tasksCumulative.map((v, i) => {
                 const bl = chartData.baselineTasksCumulative[i];
-                return (bl != null && bl > 0) ? v / bl : null;
+                if (bl == null) return null;
+                if (bl === 0) return (v === 0) ? 1.0 : null;
+                return v / bl;
             });
             chartInsts.tasks.setData([chartData.ticks, normData, normData.map(() => 1.0)]);
         } else {
@@ -3203,7 +3207,9 @@ function updateChartData(s) {
             // NORM mode: single line = live / baseline, reference at 1.0
             const normData = chartData.tasksCumulative.map((v, i) => {
                 const bl = chartData.baselineTasksCumulative[i];
-                return (bl != null && bl > 0) ? v / bl : null;
+                if (bl == null) return null;
+                if (bl === 0) return (v === 0) ? 1.0 : null;
+                return v / bl;
             });
             chartInsts.tasks.setData([chartData.ticks, normData, normData.map(() => 1.0)]);
         } else {
