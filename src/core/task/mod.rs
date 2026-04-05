@@ -182,7 +182,8 @@ pub struct LifelongConfig {
     pub enabled: bool,
     pub tasks_completed: u64,
     pub needs_replan: bool,
-    /// Tick numbers at which tasks were completed (for throughput calculation).
+    /// Recent completion tick numbers (memory-bounded, not an averaging window).
+    /// Used for historical `throughput(tick)` lookups and snapshot/rewind.
     completion_ticks: VecDeque<u64>,
     /// Cached: tick number of the most recent completion for O(1) throughput.
     last_completion_tick: u64,

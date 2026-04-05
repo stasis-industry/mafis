@@ -116,9 +116,6 @@ pub(super) struct FaultEventSnapshot {
     position: [i32; 2],
     agents_affected: u32,
     cascade_depth: u32,
-    throughput_before: f32,
-    throughput_min: f32,
-    throughput_delta: f32,
     recovered: bool,
     recovery_tick: Option<u64>,
 }
@@ -688,9 +685,6 @@ pub(super) fn sync_state_to_js(
                 position: [r.position.x, r.position.y],
                 agents_affected: r.agents_affected,
                 cascade_depth: r.cascade_depth,
-                throughput_before: r.throughput_before,
-                throughput_min: r.throughput_min,
-                throughput_delta: r.throughput_delta,
                 recovered: r.recovered,
                 recovery_tick: r.recovery_tick,
             })

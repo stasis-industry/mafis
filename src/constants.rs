@@ -98,9 +98,9 @@ pub const BETWEENNESS_INTERVAL: u64 = 50;
 /// Agent count above which betweenness is disabled (too expensive).
 pub const BETWEENNESS_AGENT_LIMIT: usize = 200;
 
-/// Sliding window size for throughput calculation (goals per tick).
-/// 100 ticks ≈ 1.7s at 60Hz simulation. Standard practice in MAPF evaluation
-/// (Li et al. 2021, Chen et al. 2024) to smooth single-tick variance.
+/// Max entries in the completion-tick deques (runner + LifelongConfig).
+/// The deque stores tick numbers for snapshot/rewind — the cap is a memory
+/// bound, not an averaging window.
 pub const THROUGHPUT_WINDOW_SIZE: usize = 100;
 
 // ── Simulation duration ──────────────────────────────────────────────

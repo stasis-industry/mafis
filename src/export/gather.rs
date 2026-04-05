@@ -152,7 +152,6 @@ pub fn gather_snapshot(
         fault_mttr: fault_metrics.mttr,
         recovery_rate: fault_metrics.recovery_rate,
         avg_cascade_spread: fault_metrics.avg_cascade_spread,
-        throughput: fault_metrics.throughput,
         wait_ratio: fault_metrics.wait_ratio,
         survival_series: fault_metrics.survival_series.iter().copied().collect(),
     };

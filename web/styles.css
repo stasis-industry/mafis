@@ -1436,10 +1436,6 @@ input[type="range"]:disabled::-webkit-slider-thumb {
 
 .ft-card-agents { color: var(--text-secondary); }
 
-.ft-card-delta { font-weight: 500; }
-.ft-card-delta.negative { color: var(--state-fault); }
-.ft-card-delta.positive { color: var(--state-moving); }
-
 .ft-card-status {
     font-family: 'DM Mono', monospace;
     font-size: 10px;
@@ -2675,109 +2671,6 @@ input[type="range"]:disabled::-webkit-slider-thumb {
     gap: 8px;
 }
 
-/* --------------------------------------------------------------------------
-   Compare Overlay (Fault Timeline COMPARE)
-   -------------------------------------------------------------------------- */
-.compare-overlay {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.compare-card {
-    background: var(--bg-panel);
-    border: 1px solid var(--border-strong);
-    padding: 16px 20px;
-    min-width: 340px;
-    max-width: 420px;
-}
-
-.compare-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-}
-
-.compare-title {
-    font-family: 'DM Mono', monospace;
-    font-size: 12px;
-    font-weight: 500;
-    letter-spacing: 0.4px;
-    text-transform: uppercase;
-    color: var(--text-primary);
-}
-
-.compare-close {
-    background: none;
-    border: none;
-    font-size: 18px;
-    color: var(--text-muted);
-    cursor: pointer;
-    padding: 0 4px;
-}
-
-.compare-close:hover {
-    color: var(--text-primary);
-}
-
-.compare-cols {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-bottom: 8px;
-    padding-left: 90px;
-}
-
-.compare-col-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 10px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-}
-
-.compare-rows {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.compare-row {
-    display: grid;
-    grid-template-columns: 90px 1fr 1fr auto;
-    gap: 8px;
-    align-items: baseline;
-    padding: 3px 0;
-    border-bottom: 1px solid var(--border);
-}
-
-.compare-row:last-child {
-    border-bottom: none;
-}
-
-.compare-key {
-    font-family: 'Inter', sans-serif;
-    font-size: 11px;
-    color: var(--text-secondary);
-}
-
-.compare-val {
-    font-family: 'DM Mono', monospace;
-    font-size: 12px;
-    color: var(--text-primary);
-}
-
-.compare-delta {
-    font-family: 'DM Mono', monospace;
-    font-size: 11px;
-    font-weight: 500;
-}
-
 /* ==========================================================================
    Contextual Metrics
    ========================================================================== */
@@ -3020,11 +2913,6 @@ input[type="range"]:disabled::-webkit-slider-thumb {
 
 .live-verdict-dots .dot.filled {
     background: var(--text-primary);
-}
-
-.live-scorecard {
-    flex: 1;
-    min-width: 0;
 }
 
 /* ==========================================================================

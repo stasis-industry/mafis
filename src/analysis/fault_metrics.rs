@@ -4,12 +4,11 @@
 //! - MTTR (Mean Time To Recovery)
 //! - Recovery rate
 //! - Cascade spread
-//! - Throughput (goals/tick)
 //! - Wait ratio (aggregate)
 //! - Fault survival rate (time-series)
 
 use bevy::prelude::*;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
 use serde::Serialize;
 
@@ -35,9 +34,6 @@ pub struct FaultEventRecord {
     pub position: IVec2,
     pub agents_affected: u32,
     pub cascade_depth: u32,
-    pub throughput_before: f32,
-    pub throughput_min: f32,
-    pub throughput_delta: f32,
     pub recovered: bool,
     pub recovery_tick: Option<u64>,
     /// Alive agent count at the time this fault event occurred.
@@ -69,10 +65,6 @@ pub struct FaultMetrics {
     /// Normalized 0-1 fraction of fleet affected per event.
     pub propagation_rate: f32,
 
-    throughput_window: VecDeque<u32>,
-    finished_entities: HashSet<Entity>,
-    pub throughput: f32,
-
     pub wait_ratio: f32,
 
     pub survival_series: VecDeque<(u64, f32)>,
@@ -96,9 +88,6 @@ impl Default for FaultMetrics {
             avg_cascade_spread: 0.0,
             mtbf: None,
             propagation_rate: 0.0,
-            throughput_window: VecDeque::with_capacity(constants::THROUGHPUT_WINDOW_SIZE + 1),
-            finished_entities: HashSet::new(),
-            throughput: 0.0,
             wait_ratio: 0.0,
             survival_series: VecDeque::with_capacity(constants::MAX_SURVIVAL_ENTRIES + 1),
             initial_agent_count: 0,
@@ -117,8 +106,6 @@ impl FaultMetrics {
     pub fn truncate_after_tick(&mut self, tick: u64) {
         self.event_records.retain(|r| r.tick <= tick);
         self.survival_series.retain(|&(t, _)| t <= tick);
-        self.throughput_window.clear();
-        self.finished_entities.clear();
         // Will be recalculated by register_fault_recovery
         self.last_fault_log_len = 0;
     }
@@ -143,9 +130,6 @@ impl FaultMetrics {
             position,
             agents_affected: 1,
             cascade_depth: 0,
-            throughput_before: self.throughput,
-            throughput_min: self.throughput,
-            throughput_delta: 0.0,
             recovered: false,
             recovery_tick: None,
             alive_at_event: alive_count,
@@ -181,16 +165,6 @@ impl FaultMetrics {
         }
         let sum: u32 = spreads.iter().sum();
         sum as f32 / spreads.len() as f32
-    }
-
-    /// Compute throughput as rolling mean of a window of per-tick arrivals.
-    /// Returns 0.0 if the window is empty.
-    pub fn compute_throughput(window: &std::collections::VecDeque<u32>) -> f32 {
-        if window.is_empty() {
-            return 0.0;
-        }
-        let sum: u32 = window.iter().sum();
-        sum as f32 / window.len() as f32
     }
 
     /// Compute wait ratio as wait_actions / total_actions.
@@ -253,7 +227,6 @@ pub fn register_fault_recovery(
 
         // Create FaultEventRecord
         let event_id = fault_metrics.event_records.len();
-        let tp = fault_metrics.throughput;
         fault_metrics.event_records.push(FaultEventRecord {
             id: event_id,
             tick: entry.tick,
@@ -262,9 +235,6 @@ pub fn register_fault_recovery(
             position: entry.position,
             agents_affected: entry.agents_affected,
             cascade_depth: entry.max_depth,
-            throughput_before: tp,
-            throughput_min: tp,
-            throughput_delta: 0.0,
             recovered: false,
             recovery_tick: None,
             alive_at_event: alive_now,
@@ -334,13 +304,12 @@ pub fn update_fault_metrics(
         fault_metrics.initial_agent_count = all_agents.iter().count() as u32;
     }
 
-    // --- Track agent actions + throughput + wait ratio in single pass ---
-    let mut new_arrivals = 0u32;
+    // --- Track agent actions + wait ratio in single pass ---
     let mut total_actions_sum = 0u32;
     let mut wait_actions_sum = 0u32;
     let mut alive_count = 0u32;
 
-    for (entity, agent, last_action, stats_opt) in &mut agents {
+    for (_entity, _agent, last_action, stats_opt) in &mut agents {
         alive_count += 1;
         // Track action stats inline (was track_agent_actions)
         if let Some(mut stats) = stats_opt {
@@ -352,28 +321,6 @@ pub fn update_fault_metrics(
             total_actions_sum += stats.total_actions;
             wait_actions_sum += stats.wait_actions;
         }
-
-        // Throughput: count new goal arrivals.
-        // In lifelong mode, agents get new goals after reaching old ones,
-        // so we must re-track them when they leave their goal.
-        if agent.has_reached_goal() {
-            if !fault_metrics.finished_entities.contains(&entity) {
-                fault_metrics.finished_entities.insert(entity);
-                new_arrivals += 1;
-            }
-        } else {
-            fault_metrics.finished_entities.remove(&entity);
-        }
-    }
-
-    fault_metrics.throughput_window.push_back(new_arrivals);
-    if fault_metrics.throughput_window.len() > constants::THROUGHPUT_WINDOW_SIZE {
-        fault_metrics.throughput_window.pop_front();
-    }
-
-    if !fault_metrics.throughput_window.is_empty() {
-        let sum: u32 = fault_metrics.throughput_window.iter().sum();
-        fault_metrics.throughput = sum as f32 / fault_metrics.throughput_window.len() as f32;
     }
 
     // --- MTTR: check recovery_pending ---
@@ -405,17 +352,6 @@ pub fn update_fault_metrics(
     if fault_metrics.total_affected > 0 {
         fault_metrics.recovery_rate =
             fault_metrics.total_recovered as f32 / fault_metrics.total_affected as f32;
-    }
-
-    // --- Update FaultEventRecords (throughput min tracking) ---
-    // Recovery is now handled by BaselineDiff.recovery_tick (baseline-differential).
-    // We still track throughput_min per event for the fault timeline display.
-    let current_tp = fault_metrics.throughput;
-    for record in &mut fault_metrics.event_records {
-        if current_tp < record.throughput_min {
-            record.throughput_min = current_tp;
-        }
-        record.throughput_delta = record.throughput_before - record.throughput_min;
     }
 
     // --- Wait ratio: alive agents only ---
@@ -452,18 +388,10 @@ mod tests {
             position: IVec2::new(5, 3),
             agents_affected: 4,
             cascade_depth: 2,
-            throughput_before: 1.0,
-            throughput_min: 1.0,
-            throughput_delta: 0.0,
             recovered: false,
             recovery_tick: None,
             alive_at_event: 50,
         };
-
-        // Simulate throughput dip
-        record.throughput_min = 0.5;
-        record.throughput_delta = record.throughput_before - record.throughput_min;
-        assert!((record.throughput_delta - 0.5).abs() < 1e-5);
 
         // Simulate recovery
         record.recovered = true;
@@ -482,9 +410,6 @@ mod tests {
             position: IVec2::ZERO,
             agents_affected: 0,
             cascade_depth: 0,
-            throughput_before: 0.0,
-            throughput_min: 0.0,
-            throughput_delta: 0.0,
             recovered: false,
             recovery_tick: None,
             alive_at_event: 30,
@@ -501,7 +426,6 @@ mod tests {
         assert_eq!(fm.total_recovered, 0);
         assert_eq!(fm.recovery_rate, 0.0);
         assert_eq!(fm.avg_cascade_spread, 0.0);
-        assert_eq!(fm.throughput, 0.0);
         assert_eq!(fm.wait_ratio, 0.0);
         assert_eq!(fm.initial_agent_count, 0);
         assert!(fm.event_records.is_empty());
@@ -516,7 +440,6 @@ mod tests {
         fm.total_recovered = 7;
         fm.recovery_rate = 0.7;
         fm.avg_cascade_spread = 3.5;
-        fm.throughput = 1.2;
         fm.wait_ratio = 0.3;
         fm.initial_agent_count = 50;
 
@@ -527,7 +450,6 @@ mod tests {
         assert_eq!(fm.total_recovered, 0);
         assert_eq!(fm.recovery_rate, 0.0);
         assert_eq!(fm.avg_cascade_spread, 0.0);
-        assert_eq!(fm.throughput, 0.0);
         assert_eq!(fm.wait_ratio, 0.0);
         assert_eq!(fm.initial_agent_count, 0);
     }
@@ -630,40 +552,6 @@ mod tests {
         // (0 + 0 + 6) / 3 = 2.0
         let result = FaultMetrics::compute_avg_cascade_spread(&[0, 0, 6]);
         assert!((result - 2.0).abs() < 1e-5, "expected 2.0, got {result}");
-    }
-
-    // ── compute_throughput ────────────────────────────────────────────────
-
-    #[test]
-    fn compute_throughput_empty_window_returns_zero() {
-        let window = std::collections::VecDeque::new();
-        assert_eq!(FaultMetrics::compute_throughput(&window), 0.0);
-    }
-
-    #[test]
-    fn compute_throughput_single_tick() {
-        let mut window = std::collections::VecDeque::new();
-        window.push_back(5u32);
-        assert_eq!(FaultMetrics::compute_throughput(&window), 5.0);
-    }
-
-    #[test]
-    fn compute_throughput_multiple_ticks() {
-        let mut window = std::collections::VecDeque::new();
-        window.push_back(2u32);
-        window.push_back(4u32);
-        window.push_back(6u32);
-        // (2 + 4 + 6) / 3 = 4.0
-        let result = FaultMetrics::compute_throughput(&window);
-        assert!((result - 4.0).abs() < 1e-5, "expected 4.0, got {result}");
-    }
-
-    #[test]
-    fn compute_throughput_all_zero_ticks() {
-        let mut window = std::collections::VecDeque::new();
-        window.push_back(0u32);
-        window.push_back(0u32);
-        assert_eq!(FaultMetrics::compute_throughput(&window), 0.0);
     }
 
     // ── compute_wait_ratio ────────────────────────────────────────────────
