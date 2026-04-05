@@ -273,8 +273,12 @@ fn metrics_in_valid_ranges() {
 
     eprintln!(
         "  FT={:.3} CritTime={:.3} Survival={:.3} CascD={:.2} CascS={:.2} FUtil={:.3}",
-        m.fault_tolerance, m.critical_time, m.survival_rate,
-        m.cascade_depth_avg, m.cascade_spread_avg, m.fleet_utilization
+        m.fault_tolerance,
+        m.critical_time,
+        m.survival_rate,
+        m.cascade_depth_avg,
+        m.cascade_spread_avg,
+        m.fleet_utilization
     );
 }
 

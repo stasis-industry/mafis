@@ -257,10 +257,7 @@ impl IndexedDependencyGraph {
 /// Build an index-based ADG from SimAgent positions and planned paths.
 /// Mirrors the logic of the ECS `build_adg` system but uses agent indices
 /// instead of Bevy entities.
-pub fn build_adg_from_agents(
-    agents: &[SimAgent],
-    lookahead: usize,
-) -> IndexedDependencyGraph {
+pub fn build_adg_from_agents(agents: &[SimAgent], lookahead: usize) -> IndexedDependencyGraph {
     let mut dependents: HashMap<usize, Vec<usize>> = HashMap::new();
     let mut occupation: HashMap<IVec2, usize> = HashMap::with_capacity(agents.len());
 
@@ -274,7 +271,9 @@ pub fn build_adg_from_agents(
     // For each alive agent B, walk planned_path and find dependencies
     let mut seen = HashSet::new();
     for (idx_b, agent_b) in agents.iter().enumerate() {
-        if !agent_b.alive { continue; }
+        if !agent_b.alive {
+            continue;
+        }
         seen.clear();
         let mut pos = agent_b.pos;
         for action in agent_b.planned_path.iter().take(lookahead) {
@@ -504,7 +503,8 @@ mod tests {
         agent_a.alive = true;
         let mut agent_b = SimAgent::new(IVec2::new(1, 0));
         agent_b.alive = true;
-        agent_b.planned_path = VecDeque::from(vec![Action::Move(crate::core::action::Direction::West)]);
+        agent_b.planned_path =
+            VecDeque::from(vec![Action::Move(crate::core::action::Direction::West)]);
 
         let adg = build_adg_from_agents(&[agent_a, agent_b], 3);
         // B depends on A (B's path crosses A's position)
@@ -521,7 +521,8 @@ mod tests {
         agent_a.alive = false; // dead
         let mut agent_b = SimAgent::new(IVec2::new(1, 0));
         agent_b.alive = true;
-        agent_b.planned_path = VecDeque::from(vec![Action::Move(crate::core::action::Direction::West)]);
+        agent_b.planned_path =
+            VecDeque::from(vec![Action::Move(crate::core::action::Direction::West)]);
 
         let adg = build_adg_from_agents(&[agent_a, agent_b], 3);
         // A is dead, so no occupation → no edge
