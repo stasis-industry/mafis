@@ -80,7 +80,6 @@ fn fault_metrics_zero_before_faults() {
     assert_eq!(m.total_recovered, 0);
     assert_eq!(m.recovery_rate, 0.0);
     assert_eq!(m.avg_cascade_spread, 0.0);
-    assert_eq!(m.throughput, 0.0);
     assert_eq!(m.wait_ratio, 0.0);
 }
 
@@ -111,21 +110,12 @@ fn survival_rate_is_one_without_faults() {
 }
 
 #[test]
-fn throughput_is_finite_after_ticks() {
-    let mut h = SimHarness::new(4);
-    h.run_ticks(30);
-    let t = h.metrics().throughput;
-    assert!(t >= 0.0 && t.is_finite(), "throughput={t}");
-}
-
-#[test]
 fn fault_metrics_clear_resets_to_zero() {
     let mut h = SimHarness::new(4);
     h.run_ticks(10);
     h.app.world_mut().resource_mut::<crate::analysis::fault_metrics::FaultMetrics>().clear();
     let m = h.metrics();
     assert_eq!(m.mttr, 0.0);
-    assert_eq!(m.throughput, 0.0);
     assert_eq!(m.initial_agent_count, 0);
     assert!(m.survival_series.is_empty());
 }

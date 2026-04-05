@@ -25,7 +25,7 @@ pub struct CascadeFaultEntry {
     pub fault_type: FaultType,
     pub source: FaultSource,
     pub position: IVec2,
-    /// Number of agents affected by cascade (excluding the faulted agent).
+    /// Total agents impacted (including the faulted agent).
     pub agents_affected: u32,
     /// Maximum BFS depth reached.
     pub max_depth: u32,
@@ -111,7 +111,7 @@ pub fn propagate_cascade(
         // ADG BFS misses obstacle-creation impact because it runs after replanning;
         // paths_invalidated captures agents whose paths crossed the dead cell at
         // the instant of death.
-        let total_affected = event_affected.max(event.paths_invalidated);
+        let total_affected = event_affected.max(event.paths_invalidated) + 1;
 
         cascade.max_depth = cascade.max_depth.max(event_max_depth);
         cascade.fault_count += 1;
@@ -163,7 +163,7 @@ pub fn cascade_bfs_standalone(
         }
     }
 
-    (affected, deepest)
+    (affected + 1, deepest)
 }
 
 #[cfg(test)]
@@ -265,7 +265,7 @@ mod tests {
         use super::super::dependency::IndexedDependencyGraph;
         let graph = IndexedDependencyGraph { dependents: HashMap::new() };
         let (affected, depth) = cascade_bfs_standalone(&graph, 0, 10);
-        assert_eq!(affected, 0);
+        assert_eq!(affected, 1); // the faulted agent itself
         assert_eq!(depth, 0);
     }
 
@@ -278,7 +278,7 @@ mod tests {
         deps.insert(1, vec![2]);
         let graph = IndexedDependencyGraph { dependents: deps };
         let (affected, depth) = cascade_bfs_standalone(&graph, 0, 10);
-        assert_eq!(affected, 2);
+        assert_eq!(affected, 3); // faulted + 2 cascade
         assert_eq!(depth, 2);
     }
 
@@ -292,7 +292,7 @@ mod tests {
         deps.insert(2, vec![3]);
         let graph = IndexedDependencyGraph { dependents: deps };
         let (affected, depth) = cascade_bfs_standalone(&graph, 0, 1);
-        assert_eq!(affected, 1); // only agent 1 reached
+        assert_eq!(affected, 2); // faulted + agent 1
         assert_eq!(depth, 1);
     }
 }

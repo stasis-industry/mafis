@@ -78,7 +78,6 @@ pub struct ExportMetrics {
     pub fault_mttr: f32,
     pub recovery_rate: f32,
     pub avg_cascade_spread: f32,
-    pub throughput: f32,
     pub wait_ratio: f32,
     pub survival_series: Vec<(u64, f32)>,
 }

@@ -85,7 +85,8 @@ pub struct SimulationRunner {
     pub tick: u64,
     /// Cumulative task completions.
     pub tasks_completed: u64,
-    /// Sliding window of completion ticks for throughput calculation.
+    /// Recent completion tick numbers (memory-bounded, not an averaging window).
+    /// Used for historical `throughput(tick)` lookups and snapshot/rewind.
     task_completion_ticks: VecDeque<u64>,
 
     // ── Scratch buffers (reused across ticks to avoid per-tick allocation) ──

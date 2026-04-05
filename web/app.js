@@ -1331,7 +1331,6 @@ function updateUI(s) {
         // Live verdict + scorecard (compact, in Fault Response)
         if (s.scorecard && (faultEnabled || hasFaults)) {
             updateLiveVerdict(s.scorecard);
-            updateLiveScorecard(s.scorecard);
         }
     }
 
@@ -1690,15 +1689,7 @@ function updateFaultTimeline(s) {
         const recClass = fe.recovered ? 'recovered' : 'permanent';
         const recText = fe.recovered ? `recovered in ${fe.recovery_tick - fe.tick}t` : 'permanent';
 
-        // Impact line: agents + optional throughput drop (only if meaningful)
-        let impactHtml = `${fe.agents_affected} agent${fe.agents_affected !== 1 ? 's' : ''} affected`;
-        if (fe.agents_affected > 0 && fe.throughput_before > 0 && Math.abs(fe.throughput_delta) > 0.01) {
-            const dropPct = Math.abs((fe.throughput_delta / fe.throughput_before) * 100).toFixed(0);
-            if (parseInt(dropPct) > 0) {
-                const isNeg = fe.throughput_delta < 0;
-                impactHtml += ` <span class="ft-card-delta ${isNeg ? 'negative' : 'positive'}">${isNeg ? '\u2212' : '+'}${dropPct}%</span>`;
-            }
-        }
+        const impactHtml = `${fe.agents_affected} agent${fe.agents_affected !== 1 ? 's' : ''} affected`;
 
         card.innerHTML = `
             <div class="ft-card-header">
@@ -1722,80 +1713,6 @@ function updateFaultTimeline(s) {
         });
     });
 
-    list.querySelectorAll('.ft-btn[data-action="compare"]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const eventId = parseInt(btn.dataset.eventId);
-            showCompareOverlay(eventId, s.fault_events);
-        });
-    });
-
-}
-
-// (Bottom fault timeline section removed — now handled by unified timeline bar)
-
-function showCompareOverlay(eventId, events) {
-    const fe = events.find(e => e.id === eventId);
-    if (!fe) return;
-
-    // Remove existing overlay
-    const existing = document.getElementById('compare-overlay');
-    if (existing) existing.remove();
-
-    const beforeTick = fe.tick - 1;
-    const afterTick = fe.recovered ? fe.recovery_tick : fe.tick + 20;
-    const deltaPct = fe.throughput_before > 0
-        ? ((fe.throughput_delta / fe.throughput_before) * 100).toFixed(0)
-        : '0';
-
-    const overlay = document.createElement('div');
-    overlay.id = 'compare-overlay';
-    overlay.className = 'compare-overlay';
-    overlay.innerHTML = `
-        <div class="compare-card">
-            <div class="compare-header">
-                <span class="compare-title">BEFORE / AFTER &mdash; Event #${fe.id}</span>
-                <button class="compare-close" id="compare-close">&times;</button>
-            </div>
-            <div class="compare-cols">
-                <div class="compare-col">
-                    <div class="compare-col-label">BEFORE (T${beforeTick})</div>
-                </div>
-                <div class="compare-col">
-                    <div class="compare-col-label">AFTER (T${afterTick})</div>
-                </div>
-            </div>
-            <div class="compare-rows">
-                <div class="compare-row">
-                    <span class="compare-key">Throughput</span>
-                    <span class="compare-val">${fe.throughput_before.toFixed(3)}</span>
-                    <span class="compare-val">${fe.throughput_min.toFixed(3)}</span>
-                    <span class="compare-delta ft-card-delta negative">\u25BC ${Math.abs(deltaPct)}%</span>
-                </div>
-                <div class="compare-row">
-                    <span class="compare-key">Agents affected</span>
-                    <span class="compare-val">0</span>
-                    <span class="compare-val">${fe.agents_affected}</span>
-                    <span class="compare-delta">\u25B2 ${fe.agents_affected}</span>
-                </div>
-                <div class="compare-row">
-                    <span class="compare-key">Cascade</span>
-                    <span class="compare-val">&mdash;</span>
-                    <span class="compare-val">depth ${fe.cascade_depth}</span>
-                    <span></span>
-                </div>
-                <div class="compare-row">
-                    <span class="compare-key">Recovery</span>
-                    <span class="compare-val">&mdash;</span>
-                    <span class="compare-val">${fe.recovered ? (fe.recovery_tick - fe.tick) + ' ticks' : 'not recovered'}</span>
-                    <span></span>
-                </div>
-            </div>
-        </div>
-    `;
-
-    document.body.appendChild(overlay);
-    document.getElementById('compare-close').addEventListener('click', () => overlay.remove());
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 }
 
 // ---------------------------------------------------------------------------
@@ -2506,6 +2423,9 @@ function populateResultsFromState(s) {
         const survivalRate = s.alive_agents != null && s.total_agents > 0
             ? (s.alive_agents / s.total_agents) : 1.0;
 
+        // True running average throughput: total_tasks / tick (comparable with baseline avg)
+        const avgThroughput = s.tick > 0 && s.lifelong ? s.lifelong.tasks_completed / s.tick : 0;
+
         if (hadFaults) {
             // Full baseline vs final comparison
             if (summaryThead) summaryThead.innerHTML = '<tr><th>Metric</th><th>Baseline</th><th>Final</th><th>Delta</th></tr>';
@@ -2515,7 +2435,7 @@ function populateResultsFromState(s) {
             const blIdleRatio = bd.has_baseline && bd.baseline_wait_ratio_at_tick != null
                 ? bd.baseline_wait_ratio_at_tick : null;
             const rows = [
-                { name: 'Throughput (avg)', baseline: blThroughput, current: m.throughput },
+                { name: 'Throughput (avg)', baseline: blThroughput, current: avgThroughput },
                 { name: 'Tasks Completed', baseline: blTasks, current: liveTasks, integer: true },
                 { name: 'Idle Ratio (avg)', baseline: blIdleRatio, current: m.wait_ratio, inverted: true },
                 { name: 'Impacted Area', baseline: null, current: impactedArea, noCompare: true, suffix: '%' },
@@ -2554,7 +2474,7 @@ function populateResultsFromState(s) {
             // No faults — simple single-value summary, no baseline/final/delta
             if (summaryThead) summaryThead.innerHTML = '<tr><th>Metric</th><th>Value</th></tr>';
             const rows = [
-                { name: 'Throughput (avg)', value: m.throughput },
+                { name: 'Throughput (avg)', value: avgThroughput },
                 { name: 'Tasks Completed', value: liveTasks, integer: true },
                 { name: 'Idle Ratio (avg)', value: m.wait_ratio },
                 { name: 'Survival Rate', value: survivalRate },
@@ -2573,10 +2493,8 @@ function populateResultsFromState(s) {
     const faultBody = document.getElementById('results-fault-body');
     if (faultBody && hadFaults) {
         faultBody.innerHTML = faultEvents.map(fe => {
-            const tpDrop = fe.throughput_delta > 0 ? `-${fe.throughput_delta.toFixed(3)}` : '\u2014';
-            const tpClass = fe.throughput_delta > 0.05 ? ' class="delta-negative"' : '';
-            const recStr = fe.recovered ? `T${fe.recovery_tick}` : (fe.throughput_delta > 0 ? 'pending' : '\u2014');
-            return `<tr><td>T${fe.tick}</td><td>${fe.fault_type}</td><td>${fe.agents_affected}</td><td>${fe.cascade_depth}</td><td${tpClass}>${tpDrop}</td><td>${recStr}</td></tr>`;
+            const recStr = fe.recovered ? `T${fe.recovery_tick}` : '\u2014';
+            return `<tr><td>T${fe.tick}</td><td>${fe.fault_type}</td><td>${fe.agents_affected}</td><td>${fe.cascade_depth}</td><td>${recStr}</td></tr>`;
         }).join('');
     }
 
@@ -2821,28 +2739,6 @@ function buildLayeredBar(value, height) {
         (layers > 0 ? `<div style="position:absolute;inset:0;${bgLayers}"></div>` : '') +
         `<div style="position:relative;width:${partialPct}%;height:100%;background:${baseColor};"></div>` +
     `</div>`;
-}
-
-// ---------------------------------------------------------------------------
-// Live scorecard bars (compact, in Fault Response section)
-// ---------------------------------------------------------------------------
-function updateLiveScorecard(sc) {
-    const container = document.getElementById('live-scorecard-bars');
-    if (!container) return;
-
-    const metrics = [
-        { name: 'FT', value: sc.fault_tolerance || 0 },
-        { name: 'NRR', value: sc.nrr },
-        { name: 'FUR', value: sc.fleet_utilization || 0 },
-    ];
-    container.innerHTML = metrics.map(m => {
-        const label = m.value != null ? (m.value * 100).toFixed(0) + '%' : 'N/A';
-        return `<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">
-            <span style="width:28px;font-size:9px;color:var(--text-muted);text-transform:uppercase;">${m.name}</span>
-            ${buildLayeredBar(m.value, 4)}
-            <span style="width:24px;font-size:9px;color:var(--text-secondary);text-align:right;">${label}</span>
-        </div>`;
-    }).join('');
 }
 
 // ---------------------------------------------------------------------------

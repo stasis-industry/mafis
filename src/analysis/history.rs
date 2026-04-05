@@ -48,7 +48,6 @@ pub struct AgentSnapshot {
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct MetricsSnapshot {
-    pub throughput: f32,
     pub wait_ratio: f32,
     pub fault_count: u32,
     pub cascade_max_depth: u32,
@@ -305,7 +304,6 @@ pub fn record_tick_snapshot(
         phase: phase.label().to_string(),
         agents: agent_snapshots,
         metrics: MetricsSnapshot {
-            throughput: fault_metrics.throughput,
             wait_ratio: fault_metrics.wait_ratio,
             fault_count: cascade.fault_count,
             cascade_max_depth: cascade.max_depth,
