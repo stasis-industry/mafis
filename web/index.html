@@ -405,7 +405,7 @@
 
                             <!-- Intermittent params -->
                             <div id="fl-params-intermittent" class="fl-params" style="display:none">
-                                <div class="input-group" title="Mean ticks between faults per agent">
+                                <div class="input-group" title="Mean ticks between faults per agent (exponential inter-arrival)">
                                     <label class="input-label">MTBF (ticks)</label>
                                     <div class="slider-row">
                                         <input type="range" id="fl-inter-mtbf" min="10" max="500" value="80" step="1">
@@ -419,6 +419,15 @@
                                         <span class="slider-value" id="fl-inter-rec-val">15</span>
                                     </div>
                                 </div>
+                                <div class="input-group" title="No faults fire before this tick — first fire lands at start_tick + Exp(MTBF). Set to MTBF for a deterministic warm-up window.">
+                                    <label class="input-label">Start tick (warm-up)</label>
+                                    <div class="slider-row">
+                                        <input type="range" id="fl-inter-start" min="0" max="1000" value="0" step="1">
+                                        <span class="slider-value" id="fl-inter-start-val">0</span>
+                                    </div>
+                                </div>
+                                <!-- Live preview: expected event statistics -->
+                                <div id="intermittent-preview" class="intermittent-preview"></div>
                             </div>
 
                             <button class="btn-secondary" id="btn-add-fault" style="width:100%;margin-top:4px">+ ADD FAULT</button>
@@ -807,14 +816,6 @@
             <section id="fault-response-section" class="hidden">
                 <h3 class="panel-section-title section-toggle" role="button" tabindex="0" aria-expanded="false" data-target="fault-response-content">&#x25B8; Fault Response</h3>
                 <div class="section-content" id="fault-response-content">
-                    <!-- Live verdict + scorecard (compact) -->
-                    <div class="live-verdict-row">
-                        <div class="live-verdict">
-                            <span class="live-verdict-label" id="live-verdict-label">&mdash;</span>
-                            <span class="live-verdict-dots" id="live-verdict-dots"></span>
-                        </div>
-                    </div>
-
                     <!-- Agent status chart removed from live view (kept in Results) -->
                     <div class="chart-container" id="chart-heat" style="display:none;">
                         <div class="chart-legend"><span style="color:rgb(230,140,0)">━━</span> Avg Wear</div>
@@ -1010,7 +1011,7 @@
                                     <label class="checkbox-label"><input type="checkbox" value="wear_medium" checked><span>Wear Medium</span></label>
                                     <label class="checkbox-label"><input type="checkbox" value="wear_high"><span>Wear High</span></label>
                                     <label class="checkbox-label"><input type="checkbox" value="zone" checked><span>Spatial Zone Outage</span></label>
-                                    <label class="checkbox-label"><input type="checkbox" value="intermittent"><span>Intermittent</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="intermittent"><span>Intermittent <span class="exp-scenario-hint">(MTBF 80, start 80)</span></span></label>
                                 </div>
                                 <!-- Custom scenario builder -->
                                 <div class="exp-custom-scenario" id="exp-custom-scenario">
@@ -1042,6 +1043,7 @@
                                         <div class="exp-custom-params" id="exp-custom-params-intermittent" style="display:none">
                                             <label>MTBF<input type="number" class="input-field input-narrow" id="exp-custom-int-mtbf" value="80" min="5" max="1000"></label>
                                             <label>Recovery<input type="number" class="input-field input-narrow" id="exp-custom-int-recovery" value="15" min="1" max="200"></label>
+                                            <label>Start tick<input type="number" class="input-field input-narrow" id="exp-custom-int-start" value="80" min="0" max="5000"></label>
                                         </div>
                                         <div class="exp-custom-actions">
                                             <button class="btn-primary btn-small" id="btn-save-custom-scenario">ADD TO MATRIX</button>

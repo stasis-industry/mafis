@@ -49,6 +49,12 @@
     --leg-unloading: rgb(115, 191, 77);
     --leg-charging: rgb(89, 135, 209);
 
+    /* Fault type colors (single source of truth; must match FAULT_COLORS in app.js) */
+    --fault-burst:        rgb(230, 44, 2);
+    --fault-wear:         rgb(230, 140, 0);
+    --fault-zone:         rgb(143, 58, 222);
+    --fault-intermittent: rgb(59, 176, 184);
+
     --bg-hover: rgba(5, 5, 5, 0.04);
     --bg-canvas: rgb(255, 255, 255);
     --bg-overlay: rgba(70, 70, 74, 0.72);
@@ -553,6 +559,11 @@ input[type="range"]:disabled::-webkit-slider-thumb {
 .checkbox-label input[type="checkbox"]:checked {
     background: var(--text-primary);
     border-color: var(--text-primary);
+}
+
+.exp-scenario-hint {
+    color: var(--text-muted);
+    font-size: 0.85em;
 }
 
 .checkbox-label input[type="checkbox"]:checked::after {
@@ -1417,6 +1428,11 @@ input[type="range"]:disabled::-webkit-slider-thumb {
 .ft-card-type-badge.latency { background: var(--state-critical); }
 .ft-card-type-badge.breakdown { background: var(--state-fault); }
 .ft-card-type-badge.obstacle { background: var(--state-delayed); }
+/* Scenario-type badges (snake_case matches fe.fault_type from Rust) */
+.ft-card-type-badge.burst_failure    { background: var(--fault-burst); }
+.ft-card-type-badge.wear_based       { background: var(--fault-wear); }
+.ft-card-type-badge.zone_outage      { background: var(--fault-zone); }
+.ft-card-type-badge.intermittent_fault { background: var(--fault-intermittent); }
 
 .ft-card-tick {
     font-family: 'DM Mono', monospace;
@@ -1489,6 +1505,22 @@ input[type="range"]:disabled::-webkit-slider-thumb {
 
 .fl-params { margin-top: 2px; }
 
+/* Intermittent fault live-preview panel */
+.intermittent-preview {
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+.intermittent-preview.warn { border-color: rgb(230, 140, 0); color: rgb(180, 110, 0); }
+.intermittent-preview.error { border-color: var(--fault-burst); color: var(--fault-burst); }
+.intermittent-preview table { width: 100%; border-collapse: collapse; }
+.intermittent-preview td:last-child { text-align: right; color: var(--text-primary); }
+
 .fault-list-items {
     max-height: 200px;
     overflow-y: auto;
@@ -1525,10 +1557,10 @@ input[type="range"]:disabled::-webkit-slider-thumb {
     white-space: nowrap;
     flex-shrink: 0;
 }
-.fault-type-badge.burst { background: rgb(230, 44, 2); }
-.fault-type-badge.wear { background: rgb(230, 140, 0); }
-.fault-type-badge.zone { background: rgb(143, 58, 222); }
-.fault-type-badge.intermittent { background: rgb(59, 176, 184); }
+.fault-type-badge.burst { background: var(--fault-burst); }
+.fault-type-badge.wear { background: var(--fault-wear); }
+.fault-type-badge.zone { background: var(--fault-zone); }
+.fault-type-badge.intermittent { background: var(--fault-intermittent); }
 
 .fault-item-summary {
     flex: 1;
@@ -1654,6 +1686,12 @@ input[type="range"]:disabled::-webkit-slider-thumb {
     margin-left: -5px;
     border-left: 2px solid rgba(255, 255, 255, 0.5);
 }
+
+/* Per-fault-type color overrides for timeline markers */
+.timeline-marker[data-fault-type="burst_failure"]     { background: var(--fault-burst); }
+.timeline-marker[data-fault-type="wear_based"]        { background: var(--fault-wear); }
+.timeline-marker[data-fault-type="zone_outage"]       { background: var(--fault-zone); }
+.timeline-marker[data-fault-type="intermittent_fault"]{ background: var(--fault-intermittent); }
 
 .timeline-popup {
     position: absolute;
@@ -2873,47 +2911,6 @@ input[type="range"]:disabled::-webkit-slider-thumb {
     color: var(--state-moving);
 }
 
-/* --------------------------------------------------------------------------
-   Live Verdict + Scorecard (compact, in Fault Response section)
-   -------------------------------------------------------------------------- */
-.live-verdict-row {
-    display: flex;
-    gap: 12px;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 8px;
-}
-
-.live-verdict {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-}
-
-.live-verdict-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-primary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.live-verdict-dots {
-    display: flex;
-    gap: 3px;
-}
-
-.live-verdict-dots .dot {
-    width: 6px;
-    height: 6px;
-    background: var(--border-strong);
-}
-
-.live-verdict-dots .dot.filled {
-    background: var(--text-primary);
-}
 
 /* ==========================================================================
    Presets (Scenario + Fault Intensity)
@@ -5408,6 +5405,10 @@ body[data-phase="experiment"] #toolbar {
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+.exp-seed-label:empty {
+    display: none;
 }
 
 .exp-seed-select {

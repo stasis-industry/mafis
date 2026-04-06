@@ -10,6 +10,29 @@ const POLL_INTERVAL = 100; // ms
 // No chart point cap — arrays grow unbounded (memory is negligible)
 
 // ---------------------------------------------------------------------------
+// Centralized scorecard constants (single source of truth)
+// ---------------------------------------------------------------------------
+
+// Composite score weights (sum to 1.0 per branch)
+const SCORECARD_WEIGHTS_NRR    = { ft: 0.30, nrr: 0.25, fur: 0.25, crit: 0.20 };
+const SCORECARD_WEIGHTS_NO_NRR = { ft: 0.40,             fur: 0.33, crit: 0.27 };
+
+// Verdict thresholds
+const VERDICT_THRESHOLDS_3 = { resilient: 0.7, degrading: 0.4 }; // 3D overlay
+const VERDICT_THRESHOLDS_4 = { resilient: 0.8, moderate: 0.6, degraded: 0.4 }; // Results panel
+
+// Layered bar color zones
+const BAR_ZONES = { good: 0.7, fair: 0.4 };
+
+// Fault type colors (single source of truth; must match --fault-* CSS custom properties)
+const FAULT_COLORS = {
+    burst_failure:     'rgb(230, 44, 2)',
+    wear_based:        'rgb(230, 140, 0)',
+    zone_outage:       'rgb(143, 58, 222)',
+    intermittent_fault:'rgb(59, 176, 184)',
+};
+
+// ---------------------------------------------------------------------------
 // Security: HTML escaping helper
 // ---------------------------------------------------------------------------
 
@@ -70,10 +93,12 @@ function computeCompositeScore(sc) {
     const critNorm = Math.max(0, Math.min(1, 1.0 - (sc.critical_time || 0)));
     let composite;
     if (sc.nrr != null) {
-        composite = ft * 0.3 + sc.nrr * 0.25 + fur * 0.25 + critNorm * 0.2;
+        composite = ft * SCORECARD_WEIGHTS_NRR.ft + sc.nrr * SCORECARD_WEIGHTS_NRR.nrr
+                  + fur * SCORECARD_WEIGHTS_NRR.fur + critNorm * SCORECARD_WEIGHTS_NRR.crit;
     } else {
-        // NRR unavailable — redistribute: FT 40%, FUR 33%, CritTime 27%
-        composite = ft * 0.40 + fur * 0.33 + critNorm * 0.27;
+        // NRR unavailable — redistribute weights to remaining metrics
+        composite = ft * SCORECARD_WEIGHTS_NO_NRR.ft + fur * SCORECARD_WEIGHTS_NO_NRR.fur
+                  + critNorm * SCORECARD_WEIGHTS_NO_NRR.crit;
     }
     return { composite, filledDots: Math.round(composite * 5) };
 }
@@ -832,7 +857,8 @@ function updateTimelineBar(s) {
             const m = scheduledMarkers[i];
             if (!byTick.has(m.tick)) byTick.set(m.tick, []);
             byTick.get(m.tick).push({
-                type: 'scheduled', label: m.label, fired: m.fired, tick: m.tick
+                type: 'scheduled', label: m.label, fired: m.fired, tick: m.tick,
+                marker_type: m.marker_type
             });
         }
 
@@ -843,7 +869,8 @@ function updateTimelineBar(s) {
             if (!byTick.has(fe.tick)) byTick.set(fe.tick, []);
             byTick.get(fe.tick).push({
                 type: 'user-injected', label: fe.fault_type + ' at T' + fe.tick,
-                tick: fe.tick, affected: fe.agents_affected || 0, depth: fe.cascade_depth || 0
+                tick: fe.tick, affected: fe.agents_affected || 0, depth: fe.cascade_depth || 0,
+                fault_type: fe.fault_type, source: fe.source
             });
         }
 
@@ -859,6 +886,10 @@ function updateTimelineBar(s) {
             el.dataset.tick = tick;
             el.dataset.events = JSON.stringify(events);
             el.dataset.count = events.length;
+            // Per-fault-type color via CSS data attribute — infer scenario type for correct CSS class
+            const primary = events[0];
+            const scenarioType = primary?.marker_type || inferScenarioType(primary?.fault_type, primary?.source);
+            if (scenarioType) el.dataset.faultType = scenarioType;
             _tlTrack.appendChild(el);
             // Track scheduled markers for fired-state updates
             if (!hasUser) _tlScheduledEls.push(el);
@@ -1328,10 +1359,6 @@ function updateUI(s) {
             : '100%';
         animateMetric('metric-survival-rate', survivalRate);
 
-        // Live verdict + scorecard (compact, in Fault Response)
-        if (s.scorecard && (faultEnabled || hasFaults)) {
-            updateLiveVerdict(s.scorecard);
-        }
     }
 
     // Export Now button — enabled when not idle
@@ -1585,10 +1612,10 @@ function updateVerdictBanner(s) {
     if (s.scorecard) {
         const { composite, filledDots } = computeCompositeScore(s.scorecard);
         let verdict, verdictLabel;
-        if (composite >= 0.7) {
+        if (composite >= VERDICT_THRESHOLDS_3.resilient) {
             verdict = 'resilient';
             verdictLabel = 'RESILIENT';
-        } else if (composite >= 0.4) {
+        } else if (composite >= VERDICT_THRESHOLDS_3.degrading) {
             verdict = 'degrading';
             verdictLabel = 'DEGRADING';
         } else {
@@ -1656,7 +1683,8 @@ function updateFaultTimeline(s) {
     const section = document.getElementById('fault-events-section');
     if (!section) return;
 
-    const events = s.fault_events || [];
+    const currentTick = s.tick ?? Number.POSITIVE_INFINITY;
+    const events = (s.fault_events || []).filter(fe => fe.tick <= currentTick);
     const list = document.getElementById('ft-list');
     const empty = document.getElementById('ft-empty');
     const summary = document.getElementById('ft-summary');
@@ -1691,9 +1719,13 @@ function updateFaultTimeline(s) {
 
         const impactHtml = `${fe.agents_affected} agent${fe.agents_affected !== 1 ? 's' : ''} affected`;
 
+        const scenarioType = inferScenarioType(fe.fault_type, fe.source);
+        const badgeClass = scenarioType || fe.fault_type.toLowerCase();
+        const badgeLabel = (scenarioType || fe.fault_type).replace(/_/g, ' ').toUpperCase();
+
         card.innerHTML = `
             <div class="ft-card-header">
-                <span class="ft-card-type-badge ${fe.fault_type}">${fe.fault_type.toUpperCase()}</span>
+                <span class="ft-card-type-badge ${badgeClass}">${badgeLabel}</span>
                 <span class="ft-card-tick">tick ${fe.tick}</span>
             </div>
             <div class="ft-card-impact">${impactHtml}</div>
@@ -2370,9 +2402,9 @@ function populateResultsFromState(s) {
         const sc = s.scorecard;
         const { composite: avg, filledDots: filled } = computeCompositeScore(sc);
         let verdictText = 'Unknown';
-        if (avg >= 0.8) verdictText = 'Resilient';
-        else if (avg >= 0.6) verdictText = 'Moderate';
-        else if (avg >= 0.4) verdictText = 'Degraded';
+        if (avg >= VERDICT_THRESHOLDS_4.resilient) verdictText = 'Resilient';
+        else if (avg >= VERDICT_THRESHOLDS_4.moderate) verdictText = 'Moderate';
+        else if (avg >= VERDICT_THRESHOLDS_4.degraded) verdictText = 'Degraded';
         else verdictText = 'Fragile';
         verdictLabel.textContent = verdictText;
         verdictDots.innerHTML = Array.from({length: 5}, (_, i) =>
@@ -2693,26 +2725,6 @@ function closeContextMenu() {
 }
 
 // ---------------------------------------------------------------------------
-// Live verdict (compact, in Fault Response section)
-// ---------------------------------------------------------------------------
-function updateLiveVerdict(sc) {
-    const label = document.getElementById('live-verdict-label');
-    const dots = document.getElementById('live-verdict-dots');
-    if (!label || !dots) return;
-
-    const { composite: avg, filledDots: filled } = computeCompositeScore(sc);
-    let text = 'Unknown';
-    if (avg >= 0.8) text = 'Resilient';
-    else if (avg >= 0.6) text = 'Moderate';
-    else if (avg >= 0.4) text = 'Degraded';
-    else text = 'Fragile';
-    label.textContent = text;
-    dots.innerHTML = Array.from({length: 5}, (_, i) =>
-        `<div class="dot${i < filled ? ' filled' : ''}"></div>`
-    ).join('');
-}
-
-// ---------------------------------------------------------------------------
 // Layered bar helper — wraps at 100%, stacking layers for overflow (Braess)
 // ---------------------------------------------------------------------------
 // Each layer = 100%. Layer 0 is the current partial fill, layers behind it are
@@ -2723,7 +2735,7 @@ function buildLayeredBar(value, height) {
     const layers = Math.floor(value);    // full 100% layers behind
     const partial = (value - layers);    // current partial (0-1)
     const partialPct = (partial * 100).toFixed(1);
-    const baseColor = value >= 0.7 ? 'var(--state-moving)' : value >= 0.4 ? 'var(--state-delayed)' : 'var(--state-fault)';
+    const baseColor = value >= BAR_ZONES.good ? 'var(--state-moving)' : value >= BAR_ZONES.fair ? 'var(--state-delayed)' : 'var(--state-fault)';
     // Layer colors: each completed layer gets a slightly different hue
     const layerColors = ['rgba(74,158,130,0.25)', 'rgba(74,158,130,0.40)', 'rgba(74,158,130,0.55)'];
     let bgLayers = '';
@@ -3934,6 +3946,7 @@ function showFaultParams(type) {
     const map = { burst_failure: 'fl-params-burst', wear_based: 'fl-params-wear', zone_outage: 'fl-params-zone', intermittent_fault: 'fl-params-intermittent' };
     const panel = document.getElementById(map[type]);
     if (panel) panel.style.display = '';
+    if (type === 'intermittent_fault') updateIntermittentPreview();
 }
 
 function updateFlBurstAbs() {
@@ -3946,11 +3959,15 @@ function updateFlBurstAbs() {
 
 function clampFlTickSliders() {
     const duration = getDuration();
-    ['fl-burst-tick', 'fl-zone-tick'].forEach(id => {
+    ['fl-burst-tick', 'fl-zone-tick', 'fl-inter-start'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.max = duration;
-            if (parseInt(el.value) > duration) el.value = duration;
+            if (parseInt(el.value) > duration) {
+                el.value = duration;
+                const valEl = document.getElementById(id + '-val');
+                if (valEl) valEl.textContent = el.value;
+            }
         }
     });
 }
@@ -3975,6 +3992,7 @@ function buildFaultItemFromForm() {
         case 'intermittent_fault':
             item.mtbf = parseInt(document.getElementById('fl-inter-mtbf').value);
             item.recovery = parseInt(document.getElementById('fl-inter-rec').value);
+            item.start_tick = parseInt(document.getElementById('fl-inter-start')?.value || '0');
             break;
     }
     return item;
@@ -4030,6 +4048,17 @@ function faultBadgeClass(type) {
     return { burst_failure: 'burst', wear_based: 'wear', zone_outage: 'zone', intermittent_fault: 'intermittent' }[type] || 'burst';
 }
 
+// Map observed fault event (FaultType + FaultSource) back to the scenario type.
+// Each scenario produces a unique (fault_type, source) pair, making this deterministic.
+function inferScenarioType(fault_type, source) {
+    if (!fault_type) return '';
+    const ft = String(fault_type);
+    if (ft === 'Breakdown') return 'burst_failure';
+    if (ft === 'Overheat')  return 'wear_based';
+    if (ft === 'Latency')   return source === 'Scheduled' ? 'zone_outage' : 'intermittent_fault';
+    return '';
+}
+
 function faultBadgeLabel(type) {
     return { burst_failure: 'BURST', wear_based: 'WEAR', zone_outage: 'ZONE', intermittent_fault: 'INTER' }[type] || type;
 }
@@ -4039,7 +4068,7 @@ function faultSummary(item) {
         case 'burst_failure': return `${item.kill_percent}% at t=${item.at_tick}`;
         case 'wear_based': return `${(item.heat_rate || 'medium')} intensity`;
         case 'zone_outage': return `${item.duration}t at t=${item.at_tick}`;
-        case 'intermittent_fault': return `MTBF=${item.mtbf} rec=${item.recovery}t`;
+        case 'intermittent_fault': return `MTBF=${item.mtbf} rec=${item.recovery}t${item.start_tick > 0 ? ` start=${item.start_tick}` : ''}`;
         default: return '';
     }
 }
@@ -4068,6 +4097,72 @@ function renderFaultList() {
     });
 
     updateFaultTypeOptions();
+}
+
+// ---------------------------------------------------------------------------
+// Intermittent fault live preview
+// ---------------------------------------------------------------------------
+
+function poissonCDF(k, lambda) {
+    // P(X <= k) for Poisson(lambda)
+    let sum = 0, term = Math.exp(-lambda);
+    for (let i = 0; i <= k; i++) {
+        sum += term;
+        term *= lambda / (i + 1);
+    }
+    return sum;
+}
+
+function computeIntermittentPreview({ startTick, mtbf, duration, numAgents }) {
+    const W = Math.max(0, duration - startTick);
+    const lambda = W / mtbf; // expected events per agent in window
+    const expectedEvents = numAgents * lambda;
+    const hit1  = 1 - Math.exp(-lambda);                    // ≥1 event per agent
+    const pctile = p => Math.round(startTick + (-mtbf * Math.log(1 - p)));
+    return {
+        window: W,
+        expectedEvents,
+        agentCoverage: hit1,
+        firstFire: { p10: pctile(0.10), p50: pctile(0.50), p90: pctile(0.90) },
+    };
+}
+
+function updateIntermittentPreview() {
+    const el = document.getElementById('intermittent-preview');
+    if (!el) return;
+
+    const mtbf      = parseInt(document.getElementById('fl-inter-mtbf')?.value  || '80');
+    const startTick = parseInt(document.getElementById('fl-inter-start')?.value || '0');
+    const duration  = parseInt(document.getElementById('input-duration')?.value  || '500');
+    const numAgents = parseInt(document.getElementById('input-agents')?.value    || '20');
+
+    if (startTick >= duration) {
+        el.className = 'intermittent-preview error';
+        el.textContent = `Start tick ${startTick} ≥ duration ${duration} — no faults will fire.`;
+        return;
+    }
+
+    const { window: W, expectedEvents, agentCoverage, firstFire } =
+        computeIntermittentPreview({ startTick, mtbf, duration, numAgents });
+
+    let warnClass = '';
+    let warnMsg = '';
+    if (expectedEvents < 1) {
+        warnClass = 'warn';
+        warnMsg = `<tr><td colspan="2" style="color:rgb(180,110,0)">⚠ Expected &lt;1 event — lower start or MTBF</td></tr>`;
+    } else if (agentCoverage < 0.5) {
+        warnClass = 'warn';
+        warnMsg = `<tr><td colspan="2" style="color:rgb(180,110,0)">⚠ Only ${(agentCoverage*100).toFixed(0)}% of agents expected to see a fault</td></tr>`;
+    }
+
+    el.className = 'intermittent-preview' + (warnClass ? ' ' + warnClass : '');
+    el.innerHTML = `<table>
+        <tr><td>Active window</td><td>T${startTick} → T${duration} (${W} ticks)</td></tr>
+        <tr><td>Expected events</td><td>${expectedEvents.toFixed(1)} total</td></tr>
+        <tr><td>Agent coverage</td><td>${(agentCoverage*100).toFixed(0)}%</td></tr>
+        <tr><td>First-fire p10/p50/p90</td><td>T${firstFire.p10} / T${firstFire.p50} / T${firstFire.p90}</td></tr>
+        ${warnMsg}
+    </table>`;
 }
 
 function updateFaultTypeOptions() {
@@ -4113,15 +4208,16 @@ function bindFaultList() {
     bindSlider('fl-zone-dur', 'fl-zone-dur-val', () => {});
 
     // Intermittent params
-    bindSlider('fl-inter-mtbf', 'fl-inter-mtbf-val', () => {});
+    bindSlider('fl-inter-mtbf', 'fl-inter-mtbf-val', () => updateIntermittentPreview());
     bindSlider('fl-inter-rec', 'fl-inter-rec-val', () => {});
+    bindSlider('fl-inter-start', 'fl-inter-start-val', () => updateIntermittentPreview());
 
     // ADD button
     document.getElementById('btn-add-fault')?.addEventListener('click', addFault);
 
     // Update burst abs label and tick sliders on agent/duration change
-    document.getElementById('input-agents')?.addEventListener('input', () => { updateFlBurstAbs(); clampFlTickSliders(); });
-    document.getElementById('input-duration')?.addEventListener('input', clampFlTickSliders);
+    document.getElementById('input-agents')?.addEventListener('input', () => { updateFlBurstAbs(); clampFlTickSliders(); updateIntermittentPreview(); });
+    document.getElementById('input-duration')?.addEventListener('input', () => { clampFlTickSliders(); updateIntermittentPreview(); });
 
     // Initial state
     updateFlBurstAbs();
@@ -4721,7 +4817,7 @@ const EXPERIMENT_SCENARIOS = {
     wear_medium: { type: 'wear', rate: 'medium', threshold: 80 },
     wear_high: { type: 'wear', rate: 'high', threshold: 60 },
     zone: { type: 'zone', at_tick: 100, duration: 50 },
-    intermittent: { type: 'intermittent', mtbf: 80, recovery: 15 },
+    intermittent: { type: 'intermittent', mtbf: 80, recovery: 15, start_tick: 80 },
 };
 
 // User-defined custom scenarios (added via experiment panel)
@@ -4768,8 +4864,9 @@ function initCustomScenarioBuilder() {
         } else if (type === 'intermittent') {
             const mtbf = parseInt(document.getElementById('exp-custom-int-mtbf').value) || 80;
             const recovery = parseInt(document.getElementById('exp-custom-int-recovery').value) || 15;
-            scenario = { type: 'intermittent', mtbf, recovery };
-            label = `int_m${mtbf}_r${recovery}`;
+            const startTick = parseInt(document.getElementById('exp-custom-int-start').value) || 0;
+            scenario = { type: 'intermittent', mtbf, recovery, start_tick: startTick };
+            label = `int_m${mtbf}_r${recovery}_s${startTick}`;
         }
 
         if (scenario && label) {
@@ -5898,9 +5995,6 @@ function simulateIn3D(idx) {
     if (s.solver) sendCommand({ type: 'set_solver', value: s.solver });
     if (s.scheduler) sendCommand({ type: 'set_scheduler', value: s.scheduler });
 
-    // Parse fault scenario label and configure observatory fault settings
-    configureFaultFromScenarioLabel(s.scenario);
-
     // Get seed from dropdown (if present) or fall back to first matching run
     // Note: visibility is toggled via inline style.display by showExpDrilldown (Task 3)
     const seedSelectEl = document.getElementById('exp-drilldown-seed-select');
@@ -5918,6 +6012,14 @@ function simulateIn3D(idx) {
         r.config?.num_agents === s.num_agents &&
         (selectedSeed == null || r.config?.seed === selectedSeed)
     );
+
+    // Configure fault settings — prefer full struct from run config (exact params),
+    // fall back to lossy label parse for old exports without fault_scenario field.
+    if (matchingRun?.config?.fault_scenario) {
+        configureFaultFromScenarioStruct(matchingRun.config.fault_scenario);
+    } else {
+        configureFaultFromScenarioLabel(s.scenario);
+    }
 
     if (s.num_agents) {
         sendCommand({ type: 'set_num_agents', value: s.num_agents });
@@ -5965,9 +6067,49 @@ function simulateIn3D(idx) {
     }, 50);
 }
 
+// Configure observatory fault settings from a full fault_scenario struct
+// (as exported by the experiment runner in run.config.fault_scenario).
+// Reads every field including at_tick, kill_percent, start_tick etc. — exact params.
+function configureFaultFromScenarioStruct(fs) {
+    faultList = [];
+    if (!fs || fs.type === 'none') {
+        renderFaultList();
+        syncFaultListToRust();
+        return;
+    }
+    const id = 'f_' + (++faultIdCounter);
+    switch (fs.type) {
+        case 'burst_failure':
+            faultList.push({ id, type: 'burst_failure',
+                kill_percent: fs.kill_percent ?? 20,
+                at_tick: fs.at_tick ?? 100 });
+            break;
+        case 'wear_based':
+            faultList.push({ id, type: 'wear_based',
+                heat_rate: fs.heat_rate || 'medium' });
+            break;
+        case 'zone_outage':
+            faultList.push({ id, type: 'zone_outage',
+                at_tick: fs.at_tick ?? 100,
+                duration: fs.duration ?? 50 });
+            break;
+        case 'intermittent_fault':
+            faultList.push({ id, type: 'intermittent_fault',
+                start_tick: fs.start_tick ?? 0,
+                mtbf: fs.mtbf ?? 80,
+                recovery: fs.recovery ?? 15 });
+            break;
+        default:
+            configureFaultFromScenarioLabel(fs.type); // fallback
+            return;
+    }
+    renderFaultList();
+    syncFaultListToRust();
+}
+
 // Parse experiment scenario label and configure the observatory fault settings.
 // Labels follow Rust's scenario_label() format:
-//   "none", "burst_XXpct", "wear_RATE", "zone_XXt", "intermittent_XXmYYr"
+//   "none", "burst_XXpct", "wear_RATE", "zone_XXt", "intermittent_{S}s{M}m{R}r"
 function configureFaultFromScenarioLabel(label) {
     if (!label || label === 'none') {
         // Disable faults
