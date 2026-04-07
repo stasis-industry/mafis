@@ -76,10 +76,10 @@ fn scale_pibt_300_agents_kiva_warehouse() {
 }
 
 #[test]
-fn scale_rhcr_pibt_150_agents_warehouse_large() {
-    let (tasks, alive) = run_ticks("rhcr_pibt", "warehouse_large", 150, 300, 42);
+fn scale_rhcr_pbs_150_agents_warehouse_large() {
+    let (tasks, alive) = run_ticks("rhcr_pbs", "warehouse_large", 150, 300, 42);
     assert!(alive > 0, "all agents dead with no faults");
-    eprintln!("  rhcr_pibt/warehouse_large/150 agents: {tasks} tasks, {alive} alive");
+    eprintln!("  rhcr_pbs/warehouse_large/150 agents: {tasks} tasks, {alive} alive");
 }
 
 #[test]
@@ -90,10 +90,10 @@ fn scale_pibt_80_agents_kiva_warehouse() {
 }
 
 #[test]
-fn scale_rhcr_pibt_80_agents_kiva_warehouse() {
-    let (tasks, alive) = run_ticks("rhcr_pibt", "kiva_warehouse", 80, 300, 42);
+fn scale_rhcr_pbs_80_agents_kiva_warehouse() {
+    let (tasks, alive) = run_ticks("rhcr_pbs", "kiva_warehouse", 80, 300, 42);
     assert!(alive > 0, "all agents dead with no faults");
-    eprintln!("  rhcr_pibt/kiva_warehouse/80 agents: {tasks} tasks, {alive} alive");
+    eprintln!("  rhcr_pbs/kiva_warehouse/80 agents: {tasks} tasks, {alive} alive");
 }
 
 #[test]

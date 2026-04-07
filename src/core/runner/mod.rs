@@ -925,7 +925,7 @@ impl SimulationRunner {
             StepResult::Continue => {}
         }
 
-        // Apply goal overrides from solvers that swap tasks (e.g. TPTS).
+        // Apply goal overrides from solvers that swap tasks (default no-op for current set).
         let overrides = self.solver.drain_goal_overrides();
         for (idx, new_goal) in overrides {
             if idx < n && self.agents[idx].alive {

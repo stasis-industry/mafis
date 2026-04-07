@@ -165,7 +165,7 @@ mod tests {
     #[test]
     fn expand_full_product() {
         let matrix = ExperimentMatrix {
-            solvers: vec!["pibt".into(), "rhcr_pibt".into()],
+            solvers: vec!["pibt".into(), "rhcr_pbs".into()],
             topologies: vec!["compact_grid".into(), "warehouse_large".into()],
             scenarios: standard_scenarios(),
             schedulers: vec!["random".into()],

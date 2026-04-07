@@ -10,71 +10,56 @@ SCENARIO_ORDER = [
     "wear_medium",
     "wear_high",
     "zone_50t",
-    "intermittent_80m15r",
-    "perm_zone_100pct",
+    "intermittent_80s80m15r",
 ]
 
 # LaTeX-safe labels (for tables)
 SCENARIO_LABEL = {
-    "burst_20pct":         "Burst 20\\%",
-    "burst_50pct":         "Burst 50\\%",
-    "wear_medium":         "Wear (med.)",
-    "wear_high":           "Wear (high)",
-    "zone_50t":            "Zone (50t)",
-    "intermittent_80m15r": "Intermittent",
-    "perm_zone_100pct":    "Perm. Zone",
+    "burst_20pct":             "Burst 20\\%",
+    "burst_50pct":             "Burst 50\\%",
+    "wear_medium":             "Wear (med.)",
+    "wear_high":               "Wear (high)",
+    "zone_50t":                "Zone (50t)",
+    "intermittent_80s80m15r":  "Intermittent",
 }
 
 # Short labels (for SVG axes)
 SCENARIO_LABEL_SHORT = {
-    "burst_20pct":         "Burst 20%",
-    "burst_50pct":         "Burst 50%",
-    "wear_medium":         "Wear Med",
-    "wear_high":           "Wear High",
-    "zone_50t":            "Zone 50t",
-    "intermittent_80m15r": "Intermit.",
-    "perm_zone_100pct":    "Perm Zone",
+    "burst_20pct":             "Burst 20%",
+    "burst_50pct":             "Burst 50%",
+    "wear_medium":             "Wear Med",
+    "wear_high":               "Wear High",
+    "zone_50t":                "Zone 50t",
+    "intermittent_80s80m15r":  "Intermit.",
 }
 
 SCENARIO_CATEGORY = {
-    "burst_20pct":         "Permanent-distributed",
-    "burst_50pct":         "Permanent-distributed",
-    "wear_medium":         "Permanent-distributed",
-    "wear_high":           "Permanent-distributed",
-    "zone_50t":            "Recoverable",
-    "intermittent_80m15r": "Recoverable",
-    "perm_zone_100pct":    "Permanent-localized",
+    "burst_20pct":             "Permanent",
+    "burst_50pct":             "Permanent",
+    "wear_medium":             "Permanent",
+    "wear_high":               "Permanent",
+    "zone_50t":                "Recoverable",
+    "intermittent_80s80m15r":  "Recoverable",
 }
 
-# All 7 lifelong solvers. solver_resilience uses 6 (no rhcr_pbs).
+# Faithful solvers (sourced from public reference implementations).
+# LaCAM3-Lifelong will be added once Step 4 of solver-refocus is complete.
 SOLVER_ORDER = [
     "pibt",
-    "rhcr_pibt",
     "rhcr_pbs",
-    "rhcr_priority_astar",
     "token_passing",
-    "rt_lacam",
-    "tpts",
 ]
 
 SOLVER_LABEL = {
-    "pibt":                "PIBT",
-    "rhcr_pibt":           "RHCR-PIBT",
-    "rhcr_pbs":            "RHCR-PBS",
-    "rhcr_priority_astar": "RHCR-A*",
-    "token_passing":       "Token Passing",
-    "rt_lacam":            "RT-LaCAM",
-    "tpts":                "TPTS",
+    "pibt":          "PIBT",
+    "rhcr_pbs":      "RHCR-PBS",
+    "token_passing": "Token Passing",
 }
 
 SOLVER_COLORS = {
-    "pibt":                "#e07b39",
-    "rhcr_pibt":           "#4a9eca",
-    "rhcr_pbs":            "#5cb85c",
-    "rhcr_priority_astar": "#9b59b6",
-    "token_passing":       "#e74c3c",
-    "rt_lacam":            "#f39c12",
-    "tpts":                "#1abc9c",
+    "pibt":          "#e07b39",
+    "rhcr_pbs":      "#5cb85c",
+    "token_passing": "#e74c3c",
 }
 
 DENSITY_ORDER = [10, 20, 40, 80]

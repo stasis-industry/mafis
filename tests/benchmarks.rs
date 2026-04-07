@@ -13,8 +13,7 @@ use mafis::experiment::runner::run_single_experiment;
 const TICK_COUNT: u64 = 300;
 const NUM_AGENTS: usize = 15;
 
-const SOLVERS: &[&str] =
-    &["pibt", "rhcr_pibt", "rhcr_pbs", "rhcr_priority_astar", "token_passing", "rt_lacam", "tpts"];
+const SOLVERS: &[&str] = &["pibt", "rhcr_pbs", "token_passing"];
 
 // ═══════════════════════════════════════════════════════════════════════
 // Inline MovingAI-format maps
@@ -162,12 +161,7 @@ fn all_solvers_on_movingai_maps() {
 
     // Known limitations on unstructured MovingAI maps:
     // - PBS hits node limit on small dense maps
-    // - Priority A* exhausts its sequential planning budget on narrow corridors/warehouses
-    let known_zero = [
-        ("rhcr_pbs", "warehouse_20x20"),
-        ("rhcr_priority_astar", "corridor_16x16"),
-        ("rhcr_priority_astar", "warehouse_20x20"),
-    ];
+    let known_zero = [("rhcr_pbs", "warehouse_20x20")];
 
     for &(map_name, map_text) in maps {
         for &solver in SOLVERS {

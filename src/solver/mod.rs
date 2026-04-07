@@ -1,7 +1,6 @@
 pub mod lifelong;
 pub mod pibt;
 pub mod rhcr;
-pub mod rt_lacam;
 pub mod shared;
 pub mod token;
 
@@ -19,24 +18,21 @@ use bevy::prelude::*;
 
 use self::lifelong::LifelongSolver;
 use self::pibt::{PibtLifelongSolver, default_active_solver};
-use self::rhcr::{RhcrConfig, RhcrMode, RhcrSolver};
-use self::rt_lacam::RtLaCAMSolver;
+use self::rhcr::{RhcrConfig, RhcrSolver};
 use self::token::TokenPassingSolver;
-use self::token::TptsSolver;
 
 // ---------------------------------------------------------------------------
 // Solver registry
 // ---------------------------------------------------------------------------
 
 /// All available solver names with human-readable labels.
+///
+/// Fidelity discipline: every solver in this registry has a faithful Rust
+/// implementation traceable to a public reference source under `docs/papers_codes/`.
 pub const SOLVER_NAMES: &[(&str, &str)] = &[
     ("pibt", "PIBT — Priority Inheritance with Backtracking"),
     ("rhcr_pbs", "RHCR (PBS) — Rolling-Horizon with Priority-Based Search"),
-    ("rhcr_pibt", "RHCR (PIBT-Window) — Rolling-Horizon with PIBT"),
-    ("rhcr_priority_astar", "RHCR (Priority A*) — Rolling-Horizon with Priority A*"),
     ("token_passing", "Token Passing — Decentralized Sequential Planning"),
-    ("rt_lacam", "RT-LaCAM — Real-Time Configuration-Space Search"),
-    ("tpts", "TPTS — Token Passing with Task Swaps"),
 ];
 
 /// Create a LifelongSolver by name with auto-computed defaults.
@@ -49,20 +45,10 @@ pub fn lifelong_solver_from_name(
     match name {
         "pibt" => Some(Box::new(PibtLifelongSolver::new())),
         "rhcr_pbs" => {
-            let cfg = RhcrConfig::auto(RhcrMode::Pbs, grid_area, num_agents);
-            Some(Box::new(RhcrSolver::new(cfg)))
-        }
-        "rhcr_pibt" => {
-            let cfg = RhcrConfig::auto(RhcrMode::PibtWindow, grid_area, num_agents);
-            Some(Box::new(RhcrSolver::new(cfg)))
-        }
-        "rhcr_priority_astar" => {
-            let cfg = RhcrConfig::auto(RhcrMode::PriorityAStar, grid_area, num_agents);
+            let cfg = RhcrConfig::auto(grid_area, num_agents);
             Some(Box::new(RhcrSolver::new(cfg)))
         }
         "token_passing" => Some(Box::new(TokenPassingSolver::new())),
-        "rt_lacam" => Some(Box::new(RtLaCAMSolver::new(grid_area, num_agents))),
-        "tpts" => Some(Box::new(TptsSolver::new())),
         _ => None,
     }
 }
@@ -91,27 +77,13 @@ mod factory_tests {
     use super::*;
 
     #[test]
-    fn factory_creates_rt_lacam() {
-        let solver = lifelong_solver_from_name("rt_lacam", 100, 10);
-        assert!(solver.is_some());
-        assert_eq!(solver.unwrap().name(), "rt_lacam");
-    }
-
-    #[test]
-    fn factory_creates_tpts() {
-        let solver = lifelong_solver_from_name("tpts", 100, 10);
-        assert!(solver.is_some());
-        assert_eq!(solver.unwrap().name(), "tpts");
-    }
-
-    #[test]
     fn factory_unknown_returns_none() {
         assert!(lifelong_solver_from_name("unknown", 100, 10).is_none());
     }
 
     #[test]
     fn factory_existing_solvers_still_work() {
-        for &(name, _) in SOLVER_NAMES.iter().filter(|(n, _)| !n.contains('+')) {
+        for &(name, _) in SOLVER_NAMES.iter() {
             assert!(
                 lifelong_solver_from_name(name, 100, 10).is_some(),
                 "factory should create '{name}'"
@@ -120,7 +92,7 @@ mod factory_tests {
     }
 
     #[test]
-    fn solver_names_has_seven_entries() {
-        assert_eq!(SOLVER_NAMES.len(), 7);
+    fn solver_names_has_three_entries() {
+        assert_eq!(SOLVER_NAMES.len(), 3);
     }
 }

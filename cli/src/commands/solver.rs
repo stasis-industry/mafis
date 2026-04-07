@@ -31,24 +31,6 @@ const SOLVERS: &[SolverInfo] = &[
         reference: "Li et al., 2021",
     },
     SolverInfo {
-        id: "rhcr_pibt",
-        name: "RHCR (PIBT-Window)",
-        description: "Unrolled PIBT for H steps; fast, cooperative",
-        details: "Rolling-Horizon with PIBT as the inner planner. Unrolls PIBT for H \
-                  steps to produce cooperative plans. Fastest RHCR variant. Good \
-                  balance of speed and quality.",
-        reference: "Li et al., 2021 + Okumura et al., 2022",
-    },
-    SolverInfo {
-        id: "rhcr_priority_astar",
-        name: "RHCR (Priority A*)",
-        description: "Sequential spacetime A*; good for moderate density",
-        details: "Rolling-Horizon with sequential Priority A* planning. Each agent \
-                  plans a path using spacetime A* while treating higher-priority \
-                  agents' plans as dynamic obstacles.",
-        reference: "Li et al., 2021",
-    },
-    SolverInfo {
         id: "token_passing",
         name: "Token Passing",
         description: "Decentralized sequential planning via shared TOKEN; \u{2264}100 agents",
