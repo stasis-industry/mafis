@@ -2415,6 +2415,7 @@ function populateResultsFromState(s) {
         const { composite: avg, filledDots: filled } = computeCompositeScore(s.scorecard);
         const tier = VERDICT_TIERS.find(t => avg >= t.threshold);
         verdictLabel.textContent = tier.display;
+        if (verdictRow) verdictRow.dataset.verdict = tier.key;
         verdictDots.innerHTML = Array.from({length: 5}, (_, i) =>
             `<div class="dot${i < filled ? ' filled' : ''}"></div>`
         ).join('');
