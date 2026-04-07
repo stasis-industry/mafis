@@ -335,12 +335,7 @@ pub fn all_paper_experiments() -> Vec<(&'static str, ExperimentMatrix)> {
 /// Fidelity discipline: every solver in this list has a faithful Rust implementation
 /// traceable to public reference source code under `docs/papers_codes/`.
 fn paams_solvers() -> Vec<String> {
-    vec![
-        "pibt".into(),
-        "rhcr_pbs".into(),
-        "token_passing".into(),
-        "lacam3_lifelong".into(),
-    ]
+    vec!["pibt".into(), "rhcr_pbs".into(), "token_passing".into(), "lacam3_lifelong".into()]
 }
 
 /// PAAMS experiments: Solver × Fault × Scale × Topology + Scheduler effect.
@@ -557,11 +552,7 @@ mod tests {
         use std::sync::{Arc, Mutex};
 
         let matrix = ExperimentMatrix {
-            solvers: vec![
-                "pibt".into(),
-                "rhcr_pbs".into(),
-                "token_passing".into(),
-            ],
+            solvers: vec!["pibt".into(), "rhcr_pbs".into(), "token_passing".into()],
             topologies: vec!["warehouse_large".into()],
             scenarios: vec![None, Some(burst_20()), Some(burst_50())],
             schedulers: vec!["closest".into()],
@@ -637,11 +628,7 @@ mod tests {
 
         // Baseline only (no faults) for clean throughput comparison
         let matrix = ExperimentMatrix {
-            solvers: vec![
-                "pibt".into(),
-                "rhcr_pbs".into(),
-                "token_passing".into(),
-            ],
+            solvers: vec!["pibt".into(), "rhcr_pbs".into(), "token_passing".into()],
             topologies: vec!["warehouse_large".into()],
             scenarios: vec![None],
             schedulers: vec!["random".into()],

@@ -133,8 +133,7 @@ impl CollisionTable {
 
         // Goal handling: remove from body_last and decrement collision count.
         let goal = path[t_i];
-        if let Some(pos) =
-            self.body_last[goal as usize].iter().position(|&last| last == t_i as i32)
+        if let Some(pos) = self.body_last[goal as usize].iter().position(|&last| last == t_i as i32)
         {
             self.body_last[goal as usize].remove(pos);
         }
@@ -147,8 +146,8 @@ impl CollisionTable {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::instance::Instance;
+    use super::*;
     use crate::core::grid::GridMap;
     use bevy::prelude::*;
 

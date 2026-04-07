@@ -16,8 +16,8 @@
 //! each element is a flat cell id (matching `Vertex::id` semantics). This
 //! gives O(1) hashing for the EXPLORED map and avoids pointer chasing.
 
-use bevy::prelude::*;
 use crate::core::grid::GridMap;
+use bevy::prelude::*;
 
 /// A configuration: one cell per agent. Indexed by agent id.
 ///
@@ -92,10 +92,7 @@ pub fn is_same_config(c1: &Config, c2: &Config) -> bool {
 /// the GridMap on demand (still O(1) since at most 4 neighbors).
 pub fn neighbors(grid: &GridMap, id: u32) -> smallvec::SmallVec<[u32; 4]> {
     let pos = id_to_pos(id, grid.width);
-    grid.walkable_neighbors(pos)
-        .into_iter()
-        .map(|p| pos_to_id(p, grid.width))
-        .collect()
+    grid.walkable_neighbors(pos).into_iter().map(|p| pos_to_id(p, grid.width)).collect()
 }
 
 #[cfg(test)]

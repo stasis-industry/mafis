@@ -179,8 +179,8 @@ pub fn compare_hnode_configs(l: &Config, r: &Config) -> std::cmp::Ordering {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::instance::{Instance, pos_to_id};
+    use super::*;
     use crate::core::grid::GridMap;
     use bevy::prelude::*;
 

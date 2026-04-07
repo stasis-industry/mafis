@@ -313,9 +313,7 @@ impl<'a> Pibt<'a> {
                 let i_at = self.occupied_now[u as usize];
                 let is_blocked_singleton = {
                     let n_count = super::instance::neighbors(self.grid, u).len();
-                    n_count == 1
-                        && i_at != self.no_agent
-                        && self.ins.goals[i_at as usize] == u
+                    n_count == 1 && i_at != self.no_agent && self.ins.goals[i_at as usize] == u
                 };
                 if u == v_pusher || is_blocked_singleton {
                     n -= 1;
@@ -356,9 +354,7 @@ impl<'a> Pibt<'a> {
                 let i_at = self.occupied_now[u as usize];
                 let is_blocked_singleton = {
                     let n_count = super::instance::neighbors(self.grid, u).len();
-                    n_count == 1
-                        && i_at != self.no_agent
-                        && self.ins.goals[i_at as usize] == u
+                    n_count == 1 && i_at != self.no_agent && self.ins.goals[i_at as usize] == u
                 };
                 if u == v_pusher || is_blocked_singleton {
                     n -= 1;

@@ -17,9 +17,9 @@
 //! Returns `K` (the v_size) for unreachable cells, matching lacam3 line 4
 //! `table(ins.N, vector<int>(K, K))`.
 
+use super::instance::{Instance, id_to_pos};
 use crate::core::grid::GridMap;
 use crate::solver::shared::heuristics::DistanceMap;
-use super::instance::{Instance, id_to_pos};
 
 /// Per-agent distance table.
 ///
@@ -56,11 +56,7 @@ impl DistTable {
     pub fn get(&self, i: usize, v_id: u32) -> i32 {
         let pos = id_to_pos(v_id, self.width);
         let d = self.maps[i].get(pos);
-        if d == u64::MAX || d as usize >= self.k {
-            self.k as i32
-        } else {
-            d as i32
-        }
+        if d == u64::MAX || d as usize >= self.k { self.k as i32 } else { d as i32 }
     }
 }
 

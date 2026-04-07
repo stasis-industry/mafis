@@ -26,9 +26,9 @@
 //!   WASM). Set via `MAX_ITERS`.
 //! - The single-agent A* uses a `BinaryHeap` instead of `priority_queue`.
 
+use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
-use std::cmp::Ordering;
 
 use crate::core::grid::GridMap;
 use crate::core::seed::SeededRng;
@@ -55,10 +55,7 @@ pub struct Scatter {
 impl Scatter {
     /// Construct an empty scatter (no preferences).
     pub fn empty(n: usize) -> Self {
-        Self {
-            scatter_data: vec![HashMap::new(); n],
-            paths: vec![Vec::new(); n],
-        }
+        Self { scatter_data: vec![HashMap::new(); n], paths: vec![Vec::new(); n] }
     }
 
     /// Get the preferred next cell for agent `i` at cell `v`, if any.
@@ -72,12 +69,7 @@ impl Scatter {
     /// Run the SUO loop and produce scatter data.
     ///
     /// REFERENCE: lacam3 scatter.cpp `Scatter::construct` lines 23-147.
-    pub fn construct(
-        ins: &Instance,
-        d: &DistTable,
-        seed: u64,
-        cost_margin: i32,
-    ) -> Self {
+    pub fn construct(ins: &Instance, d: &DistTable, seed: u64, cost_margin: i32) -> Self {
         let n = ins.n;
         let v_size = ins.v_size;
         let mut rng = SeededRng::new(seed);
@@ -123,7 +115,16 @@ impl Scatter {
                 ct.clear_path(i as u32, &paths[i]);
 
                 // Single-agent A* with collision-aware priority.
-                let new_path = scatter_astar(ins.grid, d, &ct, ins.starts[i], ins.goals[i], i, cost_ub, v_size);
+                let new_path = scatter_astar(
+                    ins.grid,
+                    d,
+                    &ct,
+                    ins.starts[i],
+                    ins.goals[i],
+                    i,
+                    cost_ub,
+                    v_size,
+                );
 
                 // Replace path.
                 paths[i] = new_path;
@@ -282,7 +283,10 @@ mod tests {
         assert_eq!(scat.paths[0].len(), 5);
         // First cell = start, last = goal
         assert_eq!(scat.paths[0][0], super::super::instance::pos_to_id(IVec2::new(0, 0), 5));
-        assert_eq!(*scat.paths[0].last().unwrap(), super::super::instance::pos_to_id(IVec2::new(4, 0), 5));
+        assert_eq!(
+            *scat.paths[0].last().unwrap(),
+            super::super::instance::pos_to_id(IVec2::new(4, 0), 5)
+        );
     }
 
     #[test]

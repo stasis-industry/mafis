@@ -670,12 +670,8 @@ impl LifelongSolver for RhcrSolver {
                     combined.push((idx, vec![Action::Wait]));
                 }
 
-                let resolved = Self::lra_resolve_conflicts(
-                    &combined,
-                    agents,
-                    ctx.grid,
-                    self.config.horizon,
-                );
+                let resolved =
+                    Self::lra_resolve_conflicts(&combined, agents, ctx.grid, self.config.horizon);
 
                 // LRA may produce all-Wait plans for stuck agents on tight maps.
                 // Fall back to PIBT for those agents.
@@ -734,11 +730,7 @@ mod tests {
     fn rhcr_first_call_replans_then_continues() {
         let grid = GridMap::new(5, 5);
         let zones = test_zones();
-        let config = RhcrConfig {
-            horizon: 10,
-            replan_interval: 5,
-            pbs_node_limit: 100,
-        };
+        let config = RhcrConfig { horizon: 10, replan_interval: 5, pbs_node_limit: 100 };
         let mut solver = RhcrSolver::new(config);
         let mut cache = DistanceMapCache::default();
         let mut rng = SeededRng::new(42);

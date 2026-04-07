@@ -80,22 +80,10 @@ fn clean_benchmark_ranking_gate() {
 
     // Invariant 1: All solvers must produce non-zero throughput.
     // Catches: a port silently emitting all-Wait actions, or factory failures.
-    assert!(
-        pibt_tp > 0.0,
-        "PIBT produced zero throughput — sanity check failure"
-    );
-    assert!(
-        rhcr_tp > 0.0,
-        "RHCR-PBS produced zero throughput — sanity check failure"
-    );
-    assert!(
-        token_tp > 0.0,
-        "Token Passing produced zero throughput — sanity check failure"
-    );
-    assert!(
-        lacam3_tp > 0.0,
-        "LaCAM3 produced zero throughput — sanity check failure"
-    );
+    assert!(pibt_tp > 0.0, "PIBT produced zero throughput — sanity check failure");
+    assert!(rhcr_tp > 0.0, "RHCR-PBS produced zero throughput — sanity check failure");
+    assert!(token_tp > 0.0, "Token Passing produced zero throughput — sanity check failure");
+    assert!(lacam3_tp > 0.0, "LaCAM3 produced zero throughput — sanity check failure");
 
     // Invariant 2: lacam3 (PIBT-only mode) should be at least competitive
     // with PIBT — within 5% lower at minimum. We use lacam3's PIBT submodule

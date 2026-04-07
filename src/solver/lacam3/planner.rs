@@ -192,12 +192,14 @@ impl<'a> Planner<'a> {
         // Run PIBT.
         let h_order = self.hnodes[h_id].order.clone();
         let h_c = self.hnodes[h_id].c.clone();
-        let mut pibt = Pibt::new(self.ins, self.d, self.rng.rng.random::<u64>(), self.config.flg_swap, scatter);
-        if pibt.set_new_config(&h_c, &mut q_cand, &h_order) {
-            Some(q_cand)
-        } else {
-            None
-        }
+        let mut pibt = Pibt::new(
+            self.ins,
+            self.d,
+            self.rng.rng.random::<u64>(),
+            self.config.flg_swap,
+            scatter,
+        );
+        if pibt.set_new_config(&h_c, &mut q_cand, &h_order) { Some(q_cand) } else { None }
     }
 
     /// Rewrite paths via Dijkstra after a known-config rediscovery.
@@ -334,11 +336,7 @@ impl<'a> Planner<'a> {
         }
 
         // Extract solution.
-        if let Some(h_goal) = self.h_goal {
-            self.backtrack(h_goal)
-        } else {
-            Vec::new()
-        }
+        if let Some(h_goal) = self.h_goal { self.backtrack(h_goal) } else { Vec::new() }
     }
 }
 
@@ -381,10 +379,7 @@ mod tests {
         assert!(!solution.is_empty(), "should find solution for two crossing agents");
         // Verify no vertex collisions in any timestep
         for (t, config) in solution.iter().enumerate() {
-            assert_ne!(
-                config[0], config[1],
-                "vertex collision at t={t}: {config:?}"
-            );
+            assert_ne!(config[0], config[1], "vertex collision at t={t}: {config:?}");
         }
         // Verify final positions match goals
         let last = solution.last().unwrap();

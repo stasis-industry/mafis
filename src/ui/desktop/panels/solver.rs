@@ -149,7 +149,9 @@ pub fn solver_panel(ui: &mut egui::Ui, ui_state: &mut UiState, sim_state: SimSta
                 }
             });
 
-            ui.weak("Auto-tuned for current grid and agent count. PBS uses per-agent LRA fallback.");
+            ui.weak(
+                "Auto-tuned for current grid and agent count. PBS uses per-agent LRA fallback.",
+            );
         });
     }
 }

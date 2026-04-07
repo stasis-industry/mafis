@@ -55,9 +55,7 @@
 use bevy::prelude::*;
 
 use crate::core::seed::SeededRng;
-use crate::solver::lifelong::{
-    AgentPlan, AgentState, LifelongSolver, SolverContext, StepResult,
-};
+use crate::solver::lifelong::{AgentPlan, AgentState, LifelongSolver, SolverContext, StepResult};
 use crate::solver::shared::heuristics::DistanceMapCache;
 use crate::solver::shared::traits::{Optimality, Scalability, SolverInfo};
 
