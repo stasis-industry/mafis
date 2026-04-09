@@ -316,7 +316,9 @@ pub fn accumulate_heatmap_criticality(
     }
 
     heatmap.max_criticality = max_c.max(0.01);
-    heatmap.dirty = true;
+    if heatmap.mode == HeatmapMode::Criticality {
+        heatmap.dirty = true;
+    }
 }
 
 /// Recompute heatmap density from replay snapshot positions instead of live agents.
