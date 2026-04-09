@@ -87,6 +87,13 @@ const METRIC_KEYS = [
 // Returns { composite, filledDots } where composite is 0-1 and filledDots is 0-5.
 // When NRR is N/A (permanent deaths, no cascade recovery), its weight is
 // redistributed proportionally to the remaining three metrics.
+//
+// ⚠ NOT A RESEARCH-GRADE METRIC. The weights (0.30/0.25/0.25/0.20) are
+// hand-picked for the live observatory dashboard and have no theoretical
+// derivation. Reviewers will (correctly) attack this as an ad-hoc index.
+// Used here only as an at-a-glance UI verdict — DO NOT cite in papers.
+// The PAAMS 2026 paper reports the 5 primary metrics directly, not this
+// composite. See docs/papers/paper1_drafts/paams2026/scope_decisions.md §4.
 function computeCompositeScore(sc) {
     const ft = Math.min(sc.fault_tolerance || 0, 1.0); // Cap FT at 1.0 for composite (Braess doesn't inflate verdict)
     const fur = sc.fleet_utilization || 0;
@@ -4910,7 +4917,8 @@ const EXPERIMENT_PRESETS = {
         scenarios: ['burst_20'], agents: '8', seeds: '42, 123', ticks: 50,
     },
     solver: {
-        solvers: ['pibt', 'rhcr_pbs', 'token_passing', 'lacam3_lifelong'], topologies: ['warehouse-medium'],
+        // RHCR (PBS) is desktop-only — excluded from the web sweep.
+        solvers: ['pibt', 'token_passing', 'lacam3_lifelong'], topologies: ['warehouse-medium'],
         schedulers: ['random'], scenarios: ['none', 'burst_20', 'burst_50', 'wear_medium', 'wear_high', 'zone'],
         agents: '40', seeds: '42, 123, 456, 789, 1024', ticks: 500,
     },
