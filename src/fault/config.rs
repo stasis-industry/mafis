@@ -37,12 +37,14 @@ impl FaultSource {
 
 /// Fault configuration for the continuous automatic fault model.
 ///
-/// **WearBased scenario** uses the Weibull failure model (Carlson & Murphy 2006;
-/// CASUN 2023). At simulation init, each agent's failure time is pre-sampled via
-/// inverse CDF: `t_fail = eta * (-ln(U))^(1/beta)`, U ~ Uniform(0,1).
+/// **WearBased scenario** uses the Weibull failure model calibrated from
+/// Carlson & Murphy 2005 (field robot reliability study). At simulation init,
+/// each agent's failure time is pre-sampled via inverse CDF:
+/// `t_fail = eta * (-ln(U))^(1/beta)`, U ~ Uniform(0,1).
 /// Agents fail permanently when `operational_age >= t_fail`.
-/// Literature basis: encoder/tire wear = 73.8% of AGV failures (INASE 2014);
-/// degradation rate accelerates with accumulated use (beta > 1 = wear-out phase).
+/// Literature basis: mechanical wear (encoder/tire/gear) dominates field robot
+/// failures; degradation rate accelerates with accumulated use (beta > 1 =
+/// wear-out phase of the Weibull bathtub curve).
 ///
 /// **IntermittentFault scenario** models temporary unavailability via exponential
 /// inter-arrival times: each agent independently samples its next fault from
@@ -56,7 +58,7 @@ pub struct FaultConfig {
     /// Whether to run the Weibull wear detection each tick.
     pub weibull_enabled: bool,
     /// Shape parameter beta (beta > 1 = wear-out, increasing failure rate).
-    /// Low = 2.0 (CASUN certified warehouse AGV); High = 3.5 (Carlson 2006 field robots).
+    /// Low = 2.0 (well-maintained warehouse AGV); High = 3.5 (Carlson & Murphy 2005 field robots).
     pub weibull_beta: f32,
     /// Scale parameter eta -- characteristic life in operational movement-ticks.
     /// Accelerated time scale; calibrated to produce failures within experiment window.

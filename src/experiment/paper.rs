@@ -69,7 +69,7 @@ fn wear_medium() -> FaultScenario {
 
 fn wear_high() -> FaultScenario {
     // WearHeatRate::High -> Weibull beta=3.5, eta=150 -> ~90% fleet dead by tick 500.
-    // Models high-stress operation (Carlson & Murphy 2006: field robot MTBF = 24 h).
+    // Models high-stress operation (Carlson & Murphy 2005: field robot MTBF ~ 24 h).
     FaultScenario {
         enabled: true,
         scenario_type: FaultScenarioType::WearBased,

@@ -72,9 +72,9 @@ impl FromStr for FaultScenarioType {
 ///
 /// | Level  | beta | eta | MTTF  | ~% dead at tick 500 | Literature basis                |
 /// |--------|------|-----|-------|---------------------|---------------------------------|
-/// | Low    | 2.0  | 900 | ~800t |  ~27%               | CASUN AGV, well-maintained      |
-/// | Medium | 2.5  | 500 | ~445t |  ~63%               | Canadian survey 500-1,000 h     |
-/// | High   | 3.5  | 150 | ~137t |  ~90%               | Carlson & Murphy 2006: MTBF=24h |
+/// | Low    | 2.0  | 900 | ~800t |  ~27%               | Well-maintained warehouse AGV   |
+/// | Medium | 2.5  | 500 | ~445t |  ~63%               | Typical industrial AGV          |
+/// | High   | 3.5  | 150 | ~137t |  ~90%               | Carlson & Murphy 2005: MTBF~24h |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum WearHeatRate {
     Low,

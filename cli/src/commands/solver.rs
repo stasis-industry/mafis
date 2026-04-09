@@ -19,7 +19,7 @@ const SOLVERS: &[SolverInfo] = &[
         details: "Priority Inheritance with Backtracking. Each agent inherits priority \
                   from the highest-priority agent it would collide with. Replans every \
                   tick (zero-cost when no collision). Lifelong-native.",
-        reference: "Okumura et al., 2022",
+        reference: "Okumura et al., AIJ 2022",
     },
     SolverInfo {
         id: "rhcr_pbs",
