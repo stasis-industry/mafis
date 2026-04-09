@@ -34,6 +34,21 @@ Items are not prioritized within a section — promote to a GitHub Issue when re
 **Impact:** Low for internal use, higher if published — reviewers will ask for CIs on these metrics.  
 **What's needed:** Bootstrap CI (already done for throughput via `src/analysis/metrics.rs`) applied to MTBF/MTTR time series.
 
+### Rename `deficit_integral` / `surplus_integral` → `lost_tasks_area` / `surplus_tasks_area`
+**Status:** Paper-only rename in `docs/papers/paper1_drafts/paams2026/scope_decisions.md §4.2`. Code field names and CSV column headers are unchanged.
+**Impact:** Low — purely a clarity improvement. The new names align with the resilience-triangle (Bruneau 2003) area framing used in the paper, which is friendlier to reliability-engineering reviewers than "integral."
+**What's needed:**
+- Rename `RunMetrics.deficit_integral` and `RunMetrics.surplus_integral` in `src/experiment/metrics.rs`
+- Update CSV/JSON column headers in `src/experiment/export.rs`
+- Update `BaselineDiff.deficit_integral` in `src/analysis/baseline.rs`
+- Add a one-shot migration note in `results/paams_2026/README.md` so existing CSVs remain readable
+**Why deferred:** Touching CSV headers invalidates downstream analysis scripts (`analyze_paams.py`) and forces re-running the dashboard. Doing this *after* PAAMS submission avoids any risk of breaking the figure pipeline during the final write-up.
+
+### Verify or replace the Critical Time threshold citation
+**Status:** `CRITICAL_TIME_THRESHOLD = 0.5` in `src/constants.rs` is currently framed as an operational SLA heuristic. The earlier "Ghasemieh & Haverkort 2015" attribution was incorrect and has been removed.
+**Impact:** Medium for the paper — reviewers may ask for a formal grounding of the 50% threshold.
+**What's needed:** Either find a verifiable academic source (a service-level objective paper, a degraded-mode operations paper, or a specific performability text), OR commit to the operational framing and cite an industry source (e.g., Amazon Robotics published reliability standards) if such a public reference exists.
+
 ---
 
 ## Heterogeneous Robot Fleets
