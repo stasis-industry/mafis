@@ -133,12 +133,7 @@ fn paper_scenarios() -> Vec<Option<FaultScenario>> {
 /// 3 solvers x 6 scenarios x 30 seeds = 540 runs
 pub fn solver_resilience() -> ExperimentMatrix {
     ExperimentMatrix {
-        solvers: vec![
-            "pibt".into(),
-            "rhcr_pbs".into(),
-            "token_passing".into(),
-
-        ],
+        solvers: vec!["pibt".into(), "rhcr_pbs".into(), "token_passing".into()],
         topologies: vec!["warehouse_large".into()],
         scenarios: paper_scenarios(),
         schedulers: vec!["random".into()],
@@ -283,12 +278,7 @@ pub fn scheduler_effect() -> ExperimentMatrix {
 /// 3 solvers x 4 densities x 6 scenarios x 50 seeds = 3,600 runs
 pub fn braess_resilience() -> ExperimentMatrix {
     ExperimentMatrix {
-        solvers: vec![
-            "pibt".into(),
-            "rhcr_pbs".into(),
-            "token_passing".into(),
-
-        ],
+        solvers: vec!["pibt".into(), "rhcr_pbs".into(), "token_passing".into()],
         topologies: vec!["warehouse_large".into()],
         scenarios: paper_scenarios(),
         schedulers: vec!["random".into()],
@@ -432,12 +422,7 @@ pub fn smoke_test() -> ExperimentMatrix {
 /// 5 seeds for statistical confidence. 30 runs total (3 solvers × 2 scenarios × 5 seeds).
 pub fn solver_benchmark() -> ExperimentMatrix {
     ExperimentMatrix {
-        solvers: vec![
-            "pibt".into(),
-            "rhcr_pbs".into(),
-            "token_passing".into(),
-
-        ],
+        solvers: vec!["pibt".into(), "rhcr_pbs".into(), "token_passing".into()],
         topologies: vec!["warehouse_large".into()],
         scenarios: vec![None, Some(burst_20())],
         schedulers: vec!["random".into()],
