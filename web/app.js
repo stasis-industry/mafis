@@ -17,11 +17,28 @@ const POLL_INTERVAL = 100; // ms
 const SCORECARD_WEIGHTS_NRR    = { ft: 0.30, nrr: 0.25, fur: 0.25, crit: 0.20 };
 const SCORECARD_WEIGHTS_NO_NRR = { ft: 0.40,             fur: 0.33, crit: 0.27 };
 
-// Verdict thresholds
-const VERDICT_THRESHOLDS_3 = { resilient: 0.7, degrading: 0.4 }; // 3D overlay
-const VERDICT_THRESHOLDS_4 = { resilient: 0.8, moderate: 0.6, degraded: 0.4 }; // Results panel
+// Per-metric scorecard config — single source of truth
+// thresholds: [t1,t2,t3] → 4 tiers: poor(<t1) | low(<t2) | fair(<t3) | good(>=t3)
+// inverted: lower-is-better reverses tier ordering
+const SC_METRIC_CONFIG = {
+    ft:  { thresholds: [0.4, 0.6, 0.8], inverted: false },
+    nrr: { thresholds: [0.3, 0.5, 0.7], inverted: false },
+    fur: { thresholds: [0.2, 0.4, 0.6], inverted: false },
+    crit:{ thresholds: [0.1, 0.2, 0.4], inverted: true  },
+};
 
-// Layered bar color zones
+// Unified 4-tier verdict — used by both 3D banner and results panel
+const VERDICT_TIERS = [
+    { key: 'resilient', label: 'RESILIENT', display: 'Resilient', threshold: 0.75 },
+    { key: 'moderate',  label: 'MODERATE',  display: 'Moderate',  threshold: 0.55 },
+    { key: 'degraded',  label: 'DEGRADED',  display: 'Degraded',  threshold: 0.35 },
+    { key: 'fragile',   label: 'FRAGILE',   display: 'Fragile',   threshold: 0.0  },
+];
+
+// CSS vars per tier index (0=worst → 3=best): red / orange / yellow / green
+const SC_TIER_VARS = ['var(--sc-poor)', 'var(--sc-low)', 'var(--sc-fair)', 'var(--sc-good)'];
+
+// Layered bar color zones (used by buildLayeredBar for FT Braess overflow)
 const BAR_ZONES = { good: 0.7, fair: 0.4 };
 
 // Fault type colors (single source of truth; must match --fault-* CSS custom properties)
@@ -1618,20 +1635,9 @@ function updateVerdictBanner(s) {
     // Compute verdict from scorecard
     if (s.scorecard) {
         const { composite, filledDots } = computeCompositeScore(s.scorecard);
-        let verdict, verdictLabel;
-        if (composite >= VERDICT_THRESHOLDS_3.resilient) {
-            verdict = 'resilient';
-            verdictLabel = 'RESILIENT';
-        } else if (composite >= VERDICT_THRESHOLDS_3.degrading) {
-            verdict = 'degrading';
-            verdictLabel = 'DEGRADING';
-        } else {
-            verdict = 'collapsing';
-            verdictLabel = 'COLLAPSING';
-        }
-
-        banner.dataset.verdict = verdict;
-        label.textContent = verdictLabel;
+        const tier = VERDICT_TIERS.find(t => composite >= t.threshold);
+        banner.dataset.verdict = tier.key;
+        label.textContent = tier.label;
         detail.textContent = `Score ${composite.toFixed(2)}`;
         dots.forEach((d, i) => d.classList.toggle('filled', i < filledDots));
     } else {
@@ -2406,14 +2412,10 @@ function populateResultsFromState(s) {
     const verdictRow = document.querySelector('.results-verdict-row');
     if (verdictRow) verdictRow.style.display = hadFaults ? '' : 'none';
     if (s.scorecard && verdictLabel && hadFaults) {
-        const sc = s.scorecard;
-        const { composite: avg, filledDots: filled } = computeCompositeScore(sc);
-        let verdictText = 'Unknown';
-        if (avg >= VERDICT_THRESHOLDS_4.resilient) verdictText = 'Resilient';
-        else if (avg >= VERDICT_THRESHOLDS_4.moderate) verdictText = 'Moderate';
-        else if (avg >= VERDICT_THRESHOLDS_4.degraded) verdictText = 'Degraded';
-        else verdictText = 'Fragile';
-        verdictLabel.textContent = verdictText;
+        const { composite: avg, filledDots: filled } = computeCompositeScore(s.scorecard);
+        const tier = VERDICT_TIERS.find(t => avg >= t.threshold);
+        verdictLabel.textContent = tier.display;
+        if (verdictRow) verdictRow.dataset.verdict = tier.key;
         verdictDots.innerHTML = Array.from({length: 5}, (_, i) =>
             `<div class="dot${i < filled ? ' filled' : ''}"></div>`
         ).join('');
@@ -2424,27 +2426,20 @@ function populateResultsFromState(s) {
     if (s.scorecard && scorecardBars && hadFaults) {
         const sc = s.scorecard;
         const metrics = [
-            { name: 'Fault Tolerance', value: sc.fault_tolerance || 0 },
-            { name: 'NRR', value: sc.nrr },
-            { name: 'Fleet Utilization', value: sc.fleet_utilization || 0 },
-            { name: 'Critical Time', value: sc.critical_time || 0, inverted: true },
+            { key: 'ft',   name: 'Fault Tolerance',  value: sc.fault_tolerance || 0 },
+            { key: 'nrr',  name: 'NRR',              value: sc.nrr },
+            { key: 'fur',  name: 'Fleet Utilization', value: sc.fleet_utilization || 0 },
+            { key: 'crit', name: 'Critical Time',     value: sc.critical_time || 0 },
         ];
         scorecardBars.innerHTML = metrics.map(m => {
             const label = m.value != null ? (m.value * 100).toFixed(0) + '%' : 'N/A';
-            if (m.inverted) {
-                const color = m.value <= 0.1 ? 'var(--state-moving)' : m.value <= 0.3 ? 'var(--state-delayed)' : 'var(--state-dead)';
-                const pct = (m.value * 100).toFixed(0);
-                return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-                    <span style="width:90px;font-size:10px;color:var(--text-muted);text-transform:uppercase;">${m.name}</span>
-                    <div style="flex:1;height:8px;background:var(--bg-card);border:1px solid var(--border);">
-                        <div style="width:${pct}%;height:100%;background:${color};"></div>
-                    </div>
-                    <span style="width:30px;font-size:10px;color:var(--text-secondary);text-align:right;">${label}</span>
-                </div>`;
-            }
+            // FT uses buildLayeredBar to handle Braess overflow (>100%); others use renderScBar
+            const bar = m.key === 'ft'
+                ? buildLayeredBar(m.value, 8)
+                : renderScBar(m.value, SC_METRIC_CONFIG[m.key], 8);
             return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
                 <span style="width:90px;font-size:10px;color:var(--text-muted);text-transform:uppercase;">${m.name}</span>
-                ${buildLayeredBar(m.value, 8)}
+                ${bar}
                 <span style="width:30px;font-size:10px;color:var(--text-secondary);text-align:right;">${label}</span>
             </div>`;
         }).join('');
@@ -2729,6 +2724,36 @@ function closeContextMenu() {
     ctxMenuAgentId = null;
     ctxMenuCell = null;
     sendCommand({ type: 'clear_selection' });
+}
+
+// ---------------------------------------------------------------------------
+// Scorecard bar helpers
+// ---------------------------------------------------------------------------
+
+// Returns tier index 0–3 (0=worst/poor, 3=best/good) using an SC_METRIC_CONFIG entry.
+function scTier(value, cfg) {
+    const t = cfg.thresholds;
+    if (cfg.inverted) {
+        if (value <= t[0]) return 3;
+        if (value <= t[1]) return 2;
+        if (value <= t[2]) return 1;
+        return 0;
+    } else {
+        if (value >= t[2]) return 3;
+        if (value >= t[1]) return 2;
+        if (value >= t[0]) return 1;
+        return 0;
+    }
+}
+
+// Renders a scorecard bar HTML string. Caps at 100% (use buildLayeredBar for FT overflow).
+function renderScBar(value, cfg, height) {
+    if (value == null) {
+        return `<div style="flex:1;height:${height}px;background:var(--bg-card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;"><span style="font-size:8px;color:var(--text-muted);">N/A</span></div>`;
+    }
+    const color = SC_TIER_VARS[scTier(value, cfg)];
+    const pct = Math.min(100, Math.max(0, value * 100)).toFixed(1);
+    return `<div style="flex:1;height:${height}px;background:var(--bg-card);border:1px solid var(--border);position:relative;overflow:hidden;"><div style="width:${pct}%;height:100%;background:${color};"></div></div>`;
 }
 
 // ---------------------------------------------------------------------------
