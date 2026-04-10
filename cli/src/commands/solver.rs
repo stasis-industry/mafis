@@ -19,7 +19,7 @@ const SOLVERS: &[SolverInfo] = &[
         details: "Priority Inheritance with Backtracking. Each agent inherits priority \
                   from the highest-priority agent it would collide with. Replans every \
                   tick (zero-cost when no collision). Lifelong-native.",
-        reference: "Okumura et al., 2022",
+        reference: "Okumura et al., AIJ 2022",
     },
     SolverInfo {
         id: "rhcr_pbs",
@@ -28,24 +28,6 @@ const SOLVERS: &[SolverInfo] = &[
         details: "Rolling-Horizon Collision Resolution using Priority-Based Search. \
                   Plans H steps ahead, replans every W ticks. PBS uses a priority tree \
                   to resolve collisions with a configurable node limit.",
-        reference: "Li et al., 2021",
-    },
-    SolverInfo {
-        id: "rhcr_pibt",
-        name: "RHCR (PIBT-Window)",
-        description: "Unrolled PIBT for H steps; fast, cooperative",
-        details: "Rolling-Horizon with PIBT as the inner planner. Unrolls PIBT for H \
-                  steps to produce cooperative plans. Fastest RHCR variant. Good \
-                  balance of speed and quality.",
-        reference: "Li et al., 2021 + Okumura et al., 2022",
-    },
-    SolverInfo {
-        id: "rhcr_priority_astar",
-        name: "RHCR (Priority A*)",
-        description: "Sequential spacetime A*; good for moderate density",
-        details: "Rolling-Horizon with sequential Priority A* planning. Each agent \
-                  plans a path using spacetime A* while treating higher-priority \
-                  agents' plans as dynamic obstacles.",
         reference: "Li et al., 2021",
     },
     SolverInfo {

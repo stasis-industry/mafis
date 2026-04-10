@@ -5,7 +5,7 @@
 //! - **NRR**: `1 - MTTR/MTBF` — Normalized Recovery Ratio (Or 2025)
 //! - **Fleet Utilization**: alive+tasked agents / initial fleet size, averaged post-fault
 //! - **Critical Time**: fraction of post-fault ticks below critical threshold
-//!   (inspired by performability theory, Ghasemieh & Haverkort; threshold configurable)
+//!   (operational SLA-style threshold; see `constants::CRITICAL_TIME_THRESHOLD`)
 
 use bevy::prelude::*;
 use serde::Serialize;
@@ -33,7 +33,8 @@ pub struct ResilienceScorecard {
     /// 1.0 = full utilization, 0.0 = all agents dead or idle.
     pub fleet_utilization: f32,
     /// Fraction of post-fault ticks below critical threshold. 0-1.
-    /// (Inspired by performability theory; Ghasemieh & Haverkort; threshold configurable)
+    /// Threshold is an operational SLA heuristic (`constants::CRITICAL_TIME_THRESHOLD`),
+    /// not a derived constant from a specific performability paper.
     pub critical_time: f32,
     /// Whether any faults have occurred (controls UI visibility).
     pub has_faults: bool,
@@ -162,7 +163,7 @@ pub fn update_resilience_scorecard(
             scorecard.fault_tolerance = (p_fault / baseline_avg_tp) as f32;
         }
 
-        // --- Critical Time: ticks below threshold (performability theory) ---
+        // --- Critical Time: ticks below threshold (operational SLA heuristic) ---
         let critical_threshold = baseline_avg_tp * constants::CRITICAL_TIME_THRESHOLD;
         if live_tp < critical_threshold {
             state.ticks_below_critical += 1;

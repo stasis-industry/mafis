@@ -12,6 +12,11 @@ settings.local.json
 results/
 **__pycache__
 
+# Graphify
+.graphify_analysis.json
+.graphify_python
+**/graphify-out/
+
 # Environment & IDE
 .env
 .env.*

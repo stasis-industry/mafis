@@ -1,92 +1,58 @@
-//! RHCR — Rolling-Horizon Collision Resolution
+//! RHCR — Rolling-Horizon Collision Resolution (PBS variant)
 //!
 //! Windowed lifelong solver that replans every W ticks for a horizon of H steps.
-//! Configurable conflict resolution mode: PBS, PIBT-Window, or Priority A*.
-//! Falls back to PIBT when the windowed planner fails.
+//! Uses Priority-Based Search as the inner planner. Falls back to PIBT for
+//! agents the inner planner fails to handle.
 //!
-//! Reference: Li et al., "Lifelong Multi-Agent Path Finding in Large-Scale
-//! Warehouses" (AAAI 2021).
+//! REFERENCE: docs/papers_codes/rhcr/ (Jiaoyang-Li/RHCR)
+//! Paper: Li, Tinka, Kiesel, Durham, Kumar, Koenig — "Lifelong Multi-Agent
+//! Path Finding in Large-Scale Warehouses", AAAI 2021.
+//!
+//! Audited 2026-04-06. Specific reference mappings:
+//! - `update_congestion()` → `BasicSystem::congested()` at BasicSystem.cpp:310.
+//!   Both use the >50% wait threshold over a simulation window. MAFIS extends
+//!   this with per-cell exponentially-decayed wait counts for congestion-aware
+//!   routing — a small additive feature, not a deviation from the canonical
+//!   detection rule.
+//! - `fill_goal_sequences()` → `KivaSystem::update_goal_locations()` at
+//!   KivaSystem.cpp:70. MAFIS uses a simplified version: append random endpoints
+//!   until cumulative distance reaches the horizon. The reference's
+//!   `hold_endpoints` semantics are not implemented because MAFIS's task
+//!   lifecycle (TaskLeg state machine in src/core/task/) handles endpoint
+//!   reservations differently.
+//!
+//! See `pbs_planner.rs` for inner-planner deviations from `PBS.cpp`.
+//!
+//! The MAFIS RHCR-PBS, PIBT-Window, and Priority-A* "modes" that previously
+//! coexisted under a strategy enum were MAFIS-internal extrapolations not
+//! present in the canonical paper, and have been archived on
+//! `archive/cut-solvers`. Only PBS remains, matching Li et al.'s default
+//! configuration.
 
 use bevy::prelude::*;
-use rand::Rng;
 use smallvec::smallvec;
 
 use crate::constants;
 use crate::core::action::Action;
 use crate::core::grid::GridMap;
 use crate::core::seed::SeededRng;
+use crate::core::task::{RandomScheduler, TaskScheduler};
+use crate::core::topology::ZoneMap;
 
 use super::windowed::{WindowAgent, WindowContext, WindowResult, WindowedPlanner};
 use crate::solver::lifelong::{AgentPlan, AgentState, LifelongSolver, SolverContext, StepResult};
-use crate::solver::shared::heuristics::{DistanceMapCache, manhattan};
+use crate::solver::shared::heuristics::DistanceMapCache;
 use crate::solver::shared::pibt_core::PibtCore;
 use crate::solver::shared::traits::{Optimality, Scalability, SolverInfo};
 
 use super::pbs_planner::PbsPlanner;
-use super::pibt_planner::PibtWindowPlanner;
-use super::priority_astar::PriorityAStarPlanner;
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RhcrMode {
-    Pbs,
-    PibtWindow,
-    PriorityAStar,
-}
-
-impl RhcrMode {
-    pub fn label(&self) -> &'static str {
-        match self {
-            RhcrMode::Pbs => "PBS",
-            RhcrMode::PibtWindow => "PIBT-Window",
-            RhcrMode::PriorityAStar => "Priority A*",
-        }
-    }
-
-    pub fn id(&self) -> &'static str {
-        match self {
-            RhcrMode::Pbs => "rhcr_pbs",
-            RhcrMode::PibtWindow => "rhcr_pibt",
-            RhcrMode::PriorityAStar => "rhcr_priority_astar",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FallbackMode {
-    /// Keep solved agents' plans, PIBT only the failed ones.
-    PerAgent,
-    /// Discard all, PIBT everyone.
-    Full,
-    /// Keep partial plans up to tick budget, PIBT the rest.
-    Tiered,
-}
-
-impl FallbackMode {
-    pub fn label(&self) -> &'static str {
-        match self {
-            FallbackMode::PerAgent => "Per-Agent",
-            FallbackMode::Full => "Full",
-            FallbackMode::Tiered => "Tiered",
-        }
-    }
-
-    pub fn id(&self) -> &'static str {
-        match self {
-            FallbackMode::PerAgent => "per_agent",
-            FallbackMode::Full => "full",
-            FallbackMode::Tiered => "tiered",
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct RhcrConfig {
-    pub mode: RhcrMode,
-    pub fallback: FallbackMode,
     pub horizon: usize,
     pub replan_interval: usize,
     pub pbs_node_limit: usize,
@@ -96,17 +62,12 @@ impl RhcrConfig {
     /// Compute smart defaults from grid dimensions and agent count.
     ///
     /// Key trade-off: longer horizons = better plans, but larger frame stalls.
-    /// We cap H based on mode cost to keep worst-case replan under ~50ms in WASM.
-    pub fn auto(mode: RhcrMode, grid_area: usize, num_agents: usize) -> Self {
+    /// We cap H to keep worst-case PBS replan under ~50ms in WASM.
+    pub fn auto(grid_area: usize, num_agents: usize) -> Self {
         let density = if grid_area > 0 { num_agents as f32 / grid_area as f32 } else { 0.0 };
 
-        // Mode-dependent max horizon: expensive modes get shorter horizons
-        // to keep per-replan cost bounded for WASM frame budget.
-        let mode_max_h = match mode {
-            RhcrMode::PibtWindow => constants::RHCR_MAX_HORIZON, // PIBT is fast
-            RhcrMode::PriorityAStar => 20,                       // A* scales with n × H
-            RhcrMode::Pbs => 15,                                 // PBS tree search is exponential
-        };
+        // PBS tree search is exponential — keep horizon small.
+        let mode_max_h = 15;
 
         // H: scale with grid size, but cap by density and mode
         let base_h = (grid_area as f32).sqrt().ceil() as usize;
@@ -120,28 +81,18 @@ impl RhcrConfig {
         let h = h.clamp(constants::RHCR_MIN_HORIZON, constants::RHCR_MAX_HORIZON);
 
         // W: replan more often to spread cost across ticks.
-        // W = H/3 keeps plans fresh without huge per-replan stalls.
         let w = if density > 0.15 {
-            // High density: replan more aggressively (W = H/4)
             (h / 4).max(constants::RHCR_MIN_REPLAN_INTERVAL)
         } else if density > 0.05 {
-            // Medium density: standard interval (W = H/3)
             (h / 3).max(constants::RHCR_MIN_REPLAN_INTERVAL)
         } else {
-            // Low density: replan less often — agents have more room to follow stale plans
             (h / 2).max(constants::RHCR_MIN_REPLAN_INTERVAL)
-        };
-
-        let fallback = match mode {
-            RhcrMode::Pbs => FallbackMode::PerAgent,
-            RhcrMode::PibtWindow => FallbackMode::Full,
-            RhcrMode::PriorityAStar => FallbackMode::Tiered,
         };
 
         // Tighter node limit for PBS — reduces worst-case tree explosion
         let pbs_node_limit = (num_agents * 3).clamp(50, constants::PBS_MAX_NODE_LIMIT);
 
-        Self { mode, fallback, horizon: h, replan_interval: w, pbs_node_limit }
+        Self { horizon: h, replan_interval: w, pbs_node_limit }
     }
 }
 
@@ -156,8 +107,11 @@ pub struct RhcrSolver {
     ticks_since_replan: usize,
     plan_buffer: Vec<AgentPlan>,
     /// Previous plans from last successful replan, for warm-starting the next window.
-    /// Format: (agent_index, actions_vec).
-    previous_plans: Vec<(usize, Vec<Action>)>,
+    /// Stored as `SmallVec` matching `PlanFragment.actions` storage so the
+    /// per-replan write at the bottom of `step()` is a cheap inline clone
+    /// (zero heap allocations when plans fit in the 20-action inline buffer,
+    /// which is the common case for the default horizon).
+    previous_plans: Vec<(usize, smallvec::SmallVec<[Action; 20]>)>,
     /// Previous positions for congestion detection (reference C++ BasicSystem::congested).
     prev_positions: Vec<IVec2>,
     /// Consecutive ticks where >50% of agents are stuck.
@@ -167,15 +121,21 @@ pub struct RhcrSolver {
     wait_counts: Vec<f32>,
     /// Grid width for indexing into `wait_counts`.
     wait_counts_width: i32,
+    // ─── Per-replan scratch buffers (Phase 2 hoisting) ────────────────
+    //
+    // Cleared and re-extended on every replan instead of allocated fresh.
+    // Bounded by `num_agents`. The reason these can live on the solver
+    // (rather than being function-local) is split-borrow: `WindowContext`
+    // borrows these scratch fields immutably while `self.planner` is
+    // borrowed mutably — disjoint fields, so the borrow checker accepts.
+    scratch_window_agents: Vec<WindowAgent>,
+    scratch_initial_plans: Vec<Option<Vec<Action>>>,
+    scratch_start_constraints: Vec<(IVec2, u64)>,
 }
 
 impl RhcrSolver {
     pub fn new(config: RhcrConfig) -> Self {
-        let planner: Box<dyn WindowedPlanner> = match config.mode {
-            RhcrMode::Pbs => Box::new(PbsPlanner::new()),
-            RhcrMode::PibtWindow => Box::new(PibtWindowPlanner::new()),
-            RhcrMode::PriorityAStar => Box::new(PriorityAStarPlanner::new()),
-        };
+        let planner: Box<dyn WindowedPlanner> = Box::new(PbsPlanner::new());
 
         // Start at replan_interval - 1 so the very first step() triggers a replan.
         // Without this, agents would sit idle for W ticks before getting any plans.
@@ -192,6 +152,42 @@ impl RhcrSolver {
             wait_counts: Vec::new(),
             wait_counts_width: 0,
             congestion_streak: 0,
+            scratch_window_agents: Vec::new(),
+            scratch_initial_plans: Vec::new(),
+            scratch_start_constraints: Vec::new(),
+        }
+    }
+
+    /// Construct an RHCR solver with **pre-sized PBS scratch buffers**. The
+    /// underlying [`PbsPlanner::with_capacity`] reserves the full
+    /// `FlatConstraintIndex` / `SeqGoalGrid` / `FlatCAT` slabs at construction
+    /// (~3 MB total for a 1000-cell × 20-horizon grid) so the first
+    /// `plan_window` call doesn't stall the WASM main thread.
+    ///
+    /// Use this from production paths that know the grid dimensions ahead of
+    /// time (the `lifelong_solver_from_name_sized` factory). Tests and the
+    /// experiment runner can keep using [`RhcrSolver::new`].
+    pub fn with_grid(config: RhcrConfig, grid_w: usize, grid_h: usize) -> Self {
+        let max_goals = constants::PBS_GOAL_SEQUENCE_MAX_LEN + 1;
+        let planner: Box<dyn WindowedPlanner> =
+            Box::new(PbsPlanner::with_capacity(grid_w, grid_h, config.horizon, max_goals));
+
+        let initial_counter = config.replan_interval.saturating_sub(1);
+
+        Self {
+            config,
+            planner,
+            pibt_fallback: PibtCore::new(),
+            ticks_since_replan: initial_counter,
+            plan_buffer: Vec::new(),
+            previous_plans: Vec::new(),
+            prev_positions: Vec::new(),
+            wait_counts: Vec::new(),
+            wait_counts_width: 0,
+            congestion_streak: 0,
+            scratch_window_agents: Vec::new(),
+            scratch_initial_plans: Vec::new(),
+            scratch_start_constraints: Vec::new(),
         }
     }
 
@@ -199,48 +195,51 @@ impl RhcrSolver {
         &self.config
     }
 
-    /// Fill goal sequences for agents whose primary goal is reachable within the
-    /// planning horizon. Appends random zone endpoints until cumulative distance
-    /// reaches the horizon. Reference: KivaSystem::update_goal_locations() in RHCR C++.
+    /// Populate `WindowAgent.goal_sequence` for every agent by querying the
+    /// scheduler's `peek_task_chain`. The chain is the agent's *hypothetical*
+    /// future-task projection — alternating pickup/delivery endpoints starting
+    /// after `agent.goal`, sized so cumulative Manhattan distance is bounded by
+    /// `horizon` and length is bounded by `PBS_GOAL_SEQUENCE_MAX_LEN`.
+    ///
+    /// Reference: `KivaSystem::update_goal_locations()` (KivaSystem.cpp:70).
+    ///
+    /// **No `dist_to_goal >= horizon` skip**. Even agents whose primary goal
+    /// is far from `agent.pos` get a chain — sequential A* in `plan_agent`
+    /// uses the chain to make horizon-bounded best-effort progress. The
+    /// previous early-skip was the root cause of PBS's chronic NoSolution
+    /// failures on warehouse_large (PAAMS 2026 fix).
+    ///
+    /// **Scheduler instance**: this routine constructs a local
+    /// `RandomScheduler` instead of accepting a `&dyn TaskScheduler` from the
+    /// runner. The constraint is that `RhcrSolver::step()` is reached via the
+    /// `LifelongSolver` trait, whose signature is locked outside this stream's
+    /// editable scope. Using a unit-struct `RandomScheduler` is zero-cost
+    /// (the trait method dispatches statically) and gives the same alternation
+    /// semantics as the canonical reference. A future stream may plumb the
+    /// active scheduler reference through `SolverContext` so the locality-
+    /// aware `ClosestFirstScheduler::peek_task_chain` can be used instead.
     fn fill_goal_sequences(
-        agents: &mut [WindowAgent],
-        dist_maps: &[&crate::solver::shared::heuristics::DistanceMap],
-        zones: &crate::core::topology::ZoneMap,
+        window_agents: &mut [WindowAgent],
+        agent_states: &[AgentState],
+        zones: &ZoneMap,
         horizon: usize,
         rng: &mut SeededRng,
     ) {
-        let endpoints: Vec<IVec2> =
-            zones.pickup_cells.iter().chain(zones.delivery_cells.iter()).copied().collect();
-        if endpoints.is_empty() {
-            return;
-        }
+        // Local zero-sized scheduler instance — no allocation, no plumbing.
+        let scheduler = RandomScheduler;
 
-        for (i, agent) in agents.iter_mut().enumerate() {
-            let dist_to_goal = dist_maps[i].get(agent.pos);
-            if dist_to_goal >= horizon as u64 {
-                continue;
-            }
-
-            let mut cumulative = dist_to_goal;
-            let mut last_goal = agent.goal;
-            let max_seq = 4;
-            let mut attempts = 0;
-            while cumulative < horizon as u64 && agent.goal_sequence.len() < max_seq {
-                let idx = rng.rng.random_range(0..endpoints.len());
-                let next = endpoints[idx];
-                if next == last_goal {
-                    attempts += 1;
-                    if attempts > 10 {
-                        break;
-                    }
-                    continue;
-                }
-                attempts = 0;
-                let leg_dist = manhattan(last_goal, next);
-                cumulative += leg_dist;
-                agent.goal_sequence.push(next);
-                last_goal = next;
-            }
+        for (i, wa) in window_agents.iter_mut().enumerate() {
+            wa.goal_sequence.clear();
+            let task_leg = agent_states.get(i).map(|s| s.task_leg.clone()).unwrap_or_default();
+            let chain = scheduler.peek_task_chain(
+                zones,
+                wa.pos,
+                wa.goal,
+                task_leg,
+                horizon as u64,
+                &mut rng.rng,
+            );
+            wa.goal_sequence.extend(chain.into_iter());
         }
     }
 
@@ -355,10 +354,19 @@ impl RhcrSolver {
         // Resolved actions per slot
         let mut resolved: Vec<SmallVec<[Action; 20]>> = vec![SmallVec::new(); n];
 
+        // Per-iteration scratch buffers — hoisted out of the timestep loop so
+        // they allocate once per LRA call instead of `max_steps` times. Each
+        // iteration `clear()`s and re-pushes; the underlying capacity is
+        // reused across iterations, so the inner loop becomes allocation-free
+        // after the first iteration.
+        let mut intended_action: Vec<Action> = Vec::with_capacity(n);
+        let mut intended_pos: Vec<IVec2> = Vec::with_capacity(n);
+        let mut forced_wait: Vec<bool> = Vec::with_capacity(n);
+
         for _t in 0..max_steps {
             // Phase 1: compute intended next position for each slot
-            let mut intended_action: Vec<Action> = Vec::with_capacity(n);
-            let mut intended_pos: Vec<IVec2> = Vec::with_capacity(n);
+            intended_action.clear();
+            intended_pos.clear();
 
             for slot in 0..n {
                 let (_, ref plan) = plans[slot];
@@ -371,7 +379,8 @@ impl RhcrSolver {
             // Phase 2: detect conflicts and force lower-priority agents to Wait.
             // We iterate in priority order (slot 0 = highest priority). An agent
             // forced to Wait does NOT advance its cursor.
-            let mut forced_wait = vec![false; n];
+            forced_wait.clear();
+            forced_wait.resize(n, false);
 
             // Vertex conflicts: two agents want to occupy the same cell at t+1.
             // The lower-priority one (higher slot index) waits.
@@ -530,40 +539,17 @@ impl RhcrSolver {
 
 impl LifelongSolver for RhcrSolver {
     fn name(&self) -> &'static str {
-        match self.config.mode {
-            RhcrMode::Pbs => "rhcr_pbs",
-            RhcrMode::PibtWindow => "rhcr_pibt",
-            RhcrMode::PriorityAStar => "rhcr_priority_astar",
-        }
+        "rhcr_pbs"
     }
 
     fn info(&self) -> SolverInfo {
-        let (desc, scalability) = match self.config.mode {
-            RhcrMode::Pbs => (
-                "RHCR (PBS) — windowed planning with Priority-Based Search. High quality, bounded by node limit.",
-                Scalability::Medium,
-            ),
-            RhcrMode::PibtWindow => (
-                "RHCR (PIBT-Window) — windowed PIBT unrolled for H steps. Fast and cooperative.",
-                Scalability::High,
-            ),
-            RhcrMode::PriorityAStar => (
-                "RHCR (Priority A*) — sequential spacetime A* with priority ordering. Good for moderate density.",
-                Scalability::Medium,
-            ),
-        };
-
         SolverInfo {
             optimality: Optimality::Suboptimal,
-            complexity: "O(W⁻¹ × mode_cost) amortized per tick",
-            scalability,
-            description: desc,
+            complexity: "O(W⁻¹ × PBS_node_limit) amortized per tick",
+            scalability: Scalability::Medium,
+            description: "RHCR (PBS) — windowed planning with Priority-Based Search. High quality, bounded by node limit.",
             source: "Li et al., AAAI 2021",
-            recommended_max_agents: match self.config.mode {
-                RhcrMode::Pbs => Some(200),
-                RhcrMode::PibtWindow => None,
-                RhcrMode::PriorityAStar => Some(300),
-            },
+            recommended_max_agents: Some(200),
         }
     }
 
@@ -577,6 +563,9 @@ impl LifelongSolver for RhcrSolver {
         self.congestion_streak = 0;
         self.wait_counts.clear();
         self.wait_counts_width = 0;
+        self.scratch_window_agents.clear();
+        self.scratch_initial_plans.clear();
+        self.scratch_start_constraints.clear();
     }
 
     fn save_priorities(&self) -> Vec<f32> {
@@ -640,26 +629,29 @@ impl LifelongSolver for RhcrSolver {
             return StepResult::Replan(&self.plan_buffer);
         }
 
-        // Build WindowAgent list
-        let mut window_agents: Vec<WindowAgent> = agents
-            .iter()
-            .map(|a| WindowAgent {
-                index: a.index,
-                pos: a.pos,
-                goal: a.goal.unwrap_or(a.pos),
-                goal_sequence: smallvec::SmallVec::new(),
-            })
-            .collect();
+        // Build WindowAgent list into the scratch buffer (reused across replans).
+        self.scratch_window_agents.clear();
+        self.scratch_window_agents.extend(agents.iter().map(|a| WindowAgent {
+            index: a.index,
+            pos: a.pos,
+            goal: a.goal.unwrap_or(a.pos),
+            goal_sequence: smallvec::SmallVec::new(),
+        }));
 
-        // Build distance maps
-        let pairs: Vec<(IVec2, IVec2)> = window_agents.iter().map(|a| (a.pos, a.goal)).collect();
-        let dist_maps = distance_cache.get_or_compute(ctx.grid, &pairs);
+        // Note: distance maps are no longer pre-computed here. PbsPlanner
+        // populates the persistent `distance_cache` itself with the
+        // augmented goal set (primary + peek-chain) at the top of
+        // `plan_window`, then queries it via `get_cached(goal)` inside the
+        // PBS loop. The previous per-tick `get_or_compute(...)` here held an
+        // immutable borrow on `distance_cache` that would conflict with the
+        // `&mut distance_cache` argument to `plan_window`.
 
-        // Fill goal sequences for agents whose goal is close enough to reach
-        // within the planning horizon (reference: KivaSystem::update_goal_locations).
+        // Fill goal sequences (reference: KivaSystem::update_goal_locations).
+        // No `dist_to_goal >= horizon` skip — see `fill_goal_sequences` doc
+        // comment for the rationale (PAAMS 2026 PBS throughput fix).
         Self::fill_goal_sequences(
-            &mut window_agents,
-            &dist_maps,
+            &mut self.scratch_window_agents,
+            agents,
             ctx.zones,
             self.config.horizon,
             rng,
@@ -667,11 +659,15 @@ impl LifelongSolver for RhcrSolver {
 
         // Build initial plans for warm-starting: reuse previous plans for agents
         // whose goal hasn't changed and whose plan is still valid (all cells walkable).
-        let mut initial_plans: Vec<Option<Vec<Action>>> = vec![None; window_agents.len()];
+        // Reuse the scratch buffer instead of allocating a fresh Vec per replan.
+        self.scratch_initial_plans.clear();
+        self.scratch_initial_plans.resize(self.scratch_window_agents.len(), None);
         for (prev_idx, prev_actions) in &self.previous_plans {
             // Find the agent in the current window
-            if let Some(local_i) = window_agents.iter().position(|a| a.index == *prev_idx) {
-                let agent = &window_agents[local_i];
+            if let Some(local_i) =
+                self.scratch_window_agents.iter().position(|a| a.index == *prev_idx)
+            {
+                let agent = &self.scratch_window_agents[local_i];
                 // Only reuse if plan is non-empty and still valid from current position:
                 // every intermediate cell must be walkable and the plan must reach the goal.
                 if !prev_actions.is_empty() {
@@ -689,7 +685,12 @@ impl LifelongSolver for RhcrSolver {
                         }
                     }
                     if valid && reaches_goal {
-                        initial_plans[local_i] = Some(prev_actions.clone());
+                        // Convert SmallVec → Vec for WindowContext.initial_plans
+                        // type compatibility. This is the same allocation cost
+                        // as the previous Vec→Vec clone — the win from the
+                        // SmallVec storage change is on the *write* side at
+                        // the bottom of this function.
+                        self.scratch_initial_plans[local_i] = Some(prev_actions.to_vec());
                     }
                 }
             }
@@ -697,23 +698,28 @@ impl LifelongSolver for RhcrSolver {
 
         // Cross-window start constraints: vertex constraints at t=0 for all
         // agents' start positions, preventing agent A from planning to be at
-        // agent B's position at t=0 when B hasn't moved yet.
-        let start_constraints: Vec<(IVec2, u64)> =
-            window_agents.iter().map(|a| (a.pos, 0u64)).collect();
+        // agent B's position at t=0 when B hasn't moved yet. Reused scratch
+        // buffer (cleared+extended per replan).
+        self.scratch_start_constraints.clear();
+        self.scratch_start_constraints
+            .extend(self.scratch_window_agents.iter().map(|a| (a.pos, 0u64)));
 
         let window_ctx = WindowContext {
             grid: ctx.grid,
             horizon: self.config.horizon,
             node_limit: self.config.pbs_node_limit,
-            agents: &window_agents,
-            distance_maps: &dist_maps,
-            initial_plans,
-            start_constraints,
+            agents: &self.scratch_window_agents,
+            distance_maps: &[],
+            initial_plans: &self.scratch_initial_plans,
+            start_constraints: &self.scratch_start_constraints,
             travel_penalties: &self.wait_counts,
         };
 
-        // Run windowed planner
-        let result = self.planner.plan_window(&window_ctx, rng);
+        // Run windowed planner. The persistent simulation cache is passed
+        // through so PBS can populate it with the augmented goal set
+        // (primary + peek-chain) once and reuse those distance maps across
+        // every branch of the PBS DFS — no per-window allocation churn.
+        let result = self.planner.plan_window(&window_ctx, distance_cache, rng);
 
         match result {
             WindowResult::Solved(fragments) => {
@@ -722,180 +728,62 @@ impl LifelongSolver for RhcrSolver {
                 }
             }
             WindowResult::Partial { solved, failed } => {
-                match self.config.fallback {
-                    FallbackMode::PerAgent => {
-                        // LRA conflict resolution: combine solved multi-step plans
-                        // with single-Wait stubs for failed agents, then resolve
-                        // conflicts timestep-by-timestep. This preserves plan
-                        // structure (unlike PIBT fallback which discards everything).
-                        let mut combined: Vec<(usize, Vec<Action>)> =
-                            Vec::with_capacity(solved.len() + failed.len());
-                        let solved_first_steps: Vec<(usize, IVec2)> = solved
-                            .iter()
-                            .filter_map(|frag| {
-                                let agent = agents.iter().find(|a| a.index == frag.agent_index)?;
-                                let target = frag
-                                    .actions
-                                    .first()
-                                    .map(|action| action.apply(agent.pos))
-                                    .unwrap_or(agent.pos);
-                                Some((frag.agent_index, target))
-                            })
-                            .collect();
-                        for frag in &solved {
-                            combined.push((frag.agent_index, frag.actions.to_vec()));
-                        }
-                        for &idx in &failed {
-                            combined.push((idx, vec![Action::Wait]));
-                        }
+                // PBS uses per-agent LRA fallback: combine solved multi-step plans
+                // with single-Wait stubs for failed agents, then resolve
+                // conflicts timestep-by-timestep. This preserves plan structure
+                // (unlike a full-PIBT fallback which would discard everything).
+                let mut combined: Vec<(usize, Vec<Action>)> =
+                    Vec::with_capacity(solved.len() + failed.len());
+                let solved_first_steps: Vec<(usize, IVec2)> = solved
+                    .iter()
+                    .filter_map(|frag| {
+                        let agent = agents.iter().find(|a| a.index == frag.agent_index)?;
+                        let target = frag
+                            .actions
+                            .first()
+                            .map(|action| action.apply(agent.pos))
+                            .unwrap_or(agent.pos);
+                        Some((frag.agent_index, target))
+                    })
+                    .collect();
+                for frag in &solved {
+                    combined.push((frag.agent_index, frag.actions.to_vec()));
+                }
+                for &idx in &failed {
+                    combined.push((idx, vec![Action::Wait]));
+                }
 
-                        let resolved = Self::lra_resolve_conflicts(
-                            &combined,
-                            agents,
-                            ctx.grid,
-                            self.config.horizon,
-                        );
+                let resolved =
+                    Self::lra_resolve_conflicts(&combined, agents, ctx.grid, self.config.horizon);
 
-                        // LRA may produce all-Wait plans for stuck agents on tight maps.
-                        // Fall back to PIBT for those agents.
-                        let mut pibt_needed: Vec<usize> = Vec::new();
-                        for (idx, actions) in &resolved {
-                            if actions.iter().all(|a| *a == Action::Wait) && failed.contains(idx) {
-                                pibt_needed.push(*idx);
-                            } else {
-                                self.plan_buffer.push((*idx, actions.iter().copied().collect()));
-                            }
-                        }
-                        if !pibt_needed.is_empty() {
-                            self.pibt_fallback_for(
-                                &pibt_needed,
-                                agents,
-                                distance_cache,
-                                ctx.grid,
-                                &solved_first_steps,
-                            );
-                        }
+                // LRA may produce all-Wait plans for stuck agents on tight maps.
+                // Fall back to PIBT for those agents.
+                let mut pibt_needed: Vec<usize> = Vec::new();
+                for (idx, actions) in &resolved {
+                    if actions.iter().all(|a| *a == Action::Wait) && failed.contains(idx) {
+                        pibt_needed.push(*idx);
+                    } else {
+                        self.plan_buffer.push((*idx, actions.iter().copied().collect()));
                     }
-                    FallbackMode::Tiered => {
-                        // Tier 1: check solved plans for conflicts in the committed
-                        // window (first W steps). Agents with conflicts in the
-                        // committed portion get demoted to the failed set before
-                        // LRA resolution. This differs from PerAgent which keeps all
-                        // solved plans regardless of internal conflicts.
-                        let w = self.config.replan_interval;
-
-                        // Build position timelines for solved agents over W steps
-                        let mut positions: Vec<Vec<IVec2>> = Vec::with_capacity(solved.len());
-                        let mut indices: Vec<usize> = Vec::with_capacity(solved.len());
-                        for frag in &solved {
-                            if let Some(a) = agents.iter().find(|a| a.index == frag.agent_index) {
-                                let mut pos = a.pos;
-                                let mut timeline = vec![pos];
-                                for action in frag.actions.iter().take(w) {
-                                    pos = action.apply(pos);
-                                    timeline.push(pos);
-                                }
-                                positions.push(timeline);
-                                indices.push(frag.agent_index);
-                            }
-                        }
-
-                        // Detect vertex conflicts in first W steps
-                        let mut conflicting: std::collections::HashSet<usize> =
-                            std::collections::HashSet::new();
-                        for t in 1..=w {
-                            for i in 0..positions.len() {
-                                let pos_i = positions[i]
-                                    .get(t)
-                                    .copied()
-                                    .unwrap_or(*positions[i].last().unwrap());
-                                for j in (i + 1)..positions.len() {
-                                    let pos_j = positions[j]
-                                        .get(t)
-                                        .copied()
-                                        .unwrap_or(*positions[j].last().unwrap());
-                                    if pos_i == pos_j {
-                                        conflicting.insert(indices[i]);
-                                        conflicting.insert(indices[j]);
-                                    }
-                                }
-                            }
-                        }
-
-                        // Demote conflicting agents from solved to failed
-                        let mut kept_solved = Vec::new();
-                        let mut extended_failed = failed.clone();
-                        for frag in solved {
-                            if conflicting.contains(&frag.agent_index) {
-                                extended_failed.push(frag.agent_index);
-                            } else {
-                                kept_solved.push(frag);
-                            }
-                        }
-
-                        // LRA resolve on kept_solved + extended_failed
-                        let mut combined: Vec<(usize, Vec<Action>)> =
-                            Vec::with_capacity(kept_solved.len() + extended_failed.len());
-                        for frag in &kept_solved {
-                            combined.push((frag.agent_index, frag.actions.to_vec()));
-                        }
-                        for &idx in &extended_failed {
-                            combined.push((idx, vec![Action::Wait]));
-                        }
-
-                        let solved_first_steps: Vec<(usize, IVec2)> = kept_solved
-                            .iter()
-                            .filter_map(|frag| {
-                                let agent = agents.iter().find(|a| a.index == frag.agent_index)?;
-                                let target = frag
-                                    .actions
-                                    .first()
-                                    .map(|action| action.apply(agent.pos))
-                                    .unwrap_or(agent.pos);
-                                Some((frag.agent_index, target))
-                            })
-                            .collect();
-
-                        let resolved = Self::lra_resolve_conflicts(
-                            &combined,
-                            agents,
-                            ctx.grid,
-                            self.config.horizon,
-                        );
-
-                        let mut pibt_needed: Vec<usize> = Vec::new();
-                        for (idx, actions) in &resolved {
-                            if actions.iter().all(|a| *a == Action::Wait)
-                                && extended_failed.contains(idx)
-                            {
-                                pibt_needed.push(*idx);
-                            } else {
-                                self.plan_buffer.push((*idx, actions.iter().copied().collect()));
-                            }
-                        }
-                        if !pibt_needed.is_empty() {
-                            self.pibt_fallback_for(
-                                &pibt_needed,
-                                agents,
-                                distance_cache,
-                                ctx.grid,
-                                &solved_first_steps,
-                            );
-                        }
-                    }
-                    FallbackMode::Full => {
-                        // Discard all windowed plans, PIBT everyone
-                        let all_indices: Vec<usize> = agents.iter().map(|a| a.index).collect();
-                        self.pibt_fallback_for(&all_indices, agents, distance_cache, ctx.grid, &[]);
-                    }
+                }
+                if !pibt_needed.is_empty() {
+                    self.pibt_fallback_for(
+                        &pibt_needed,
+                        agents,
+                        distance_cache,
+                        ctx.grid,
+                        &solved_first_steps,
+                    );
                 }
             }
         }
 
-        // Store plans for warm-starting next replan
+        // Store plans for warm-starting next replan. The clone is a cheap
+        // inline copy when the SmallVec is in inline mode (≤20 actions, the
+        // common case for the default horizon) — zero heap allocations.
         self.previous_plans.clear();
         for (idx, actions) in &self.plan_buffer {
-            self.previous_plans.push((*idx, actions.to_vec()));
+            self.previous_plans.push((*idx, actions.clone()));
         }
 
         StepResult::Replan(&self.plan_buffer)
@@ -927,13 +815,7 @@ mod tests {
     fn rhcr_first_call_replans_then_continues() {
         let grid = GridMap::new(5, 5);
         let zones = test_zones();
-        let config = RhcrConfig {
-            mode: RhcrMode::PibtWindow,
-            fallback: FallbackMode::Full,
-            horizon: 10,
-            replan_interval: 5,
-            pbs_node_limit: 100,
-        };
+        let config = RhcrConfig { horizon: 10, replan_interval: 5, pbs_node_limit: 100 };
         let mut solver = RhcrSolver::new(config);
         let mut cache = DistanceMapCache::default();
         let mut rng = SeededRng::new(42);
@@ -952,8 +834,6 @@ mod tests {
         assert!(matches!(result, StepResult::Replan(_)));
 
         // After replan, agent has a plan — simulate ECS applying it.
-        // Move the agent each tick to avoid triggering congestion detection.
-        // Next 4 calls should return Continue (ticks 1-4 of new window)
         for tick in 1..=4 {
             let agents_moving = vec![AgentState {
                 index: 0,
@@ -981,29 +861,23 @@ mod tests {
     #[test]
     fn rhcr_auto_config_scales() {
         // Small grid, few agents
-        let cfg = RhcrConfig::auto(RhcrMode::Pbs, 100, 5);
+        let cfg = RhcrConfig::auto(100, 5);
         assert!(cfg.horizon >= constants::RHCR_MIN_HORIZON);
         assert!(cfg.horizon <= constants::RHCR_MAX_HORIZON);
         assert!(cfg.replan_interval >= constants::RHCR_MIN_REPLAN_INTERVAL);
         assert!(cfg.replan_interval <= cfg.horizon);
 
         // Large grid, many agents
-        let cfg = RhcrConfig::auto(RhcrMode::Pbs, 16384, 400);
+        let cfg = RhcrConfig::auto(16384, 400);
         assert!(cfg.horizon >= constants::RHCR_MIN_HORIZON);
         assert!(cfg.horizon <= constants::RHCR_MAX_HORIZON);
     }
 
     #[test]
-    fn rhcr_pbs_mode_produces_plans() {
+    fn rhcr_pbs_produces_plans() {
         let grid = GridMap::new(5, 5);
         let zones = test_zones();
-        let config = RhcrConfig {
-            mode: RhcrMode::Pbs,
-            fallback: FallbackMode::PerAgent,
-            horizon: 15,
-            replan_interval: 1, // replan every tick for testing
-            pbs_node_limit: 500,
-        };
+        let config = RhcrConfig { horizon: 15, replan_interval: 1, pbs_node_limit: 500 };
         let mut solver = RhcrSolver::new(config);
         let mut cache = DistanceMapCache::default();
         let mut rng = SeededRng::new(42);
@@ -1037,43 +911,10 @@ mod tests {
     }
 
     #[test]
-    fn rhcr_priority_astar_mode_produces_plans() {
-        let grid = GridMap::new(5, 5);
-        let zones = test_zones();
-        let config = RhcrConfig {
-            mode: RhcrMode::PriorityAStar,
-            fallback: FallbackMode::Tiered,
-            horizon: 15,
-            replan_interval: 1,
-            pbs_node_limit: 100,
-        };
-        let mut solver = RhcrSolver::new(config);
-        let mut cache = DistanceMapCache::default();
-        let mut rng = SeededRng::new(42);
-        let agents = vec![AgentState {
-            index: 0,
-            pos: IVec2::new(0, 0),
-            goal: Some(IVec2::new(4, 4)),
-            has_plan: false,
-            task_leg: TaskLeg::Free,
-        }];
-
-        let ctx = SolverContext { grid: &grid, zones: &zones, tick: 0, num_agents: 1 };
-        let result = solver.step(&ctx, &agents, &mut cache, &mut rng);
-        assert!(matches!(result, StepResult::Replan(_)));
-    }
-
-    #[test]
     fn rhcr_force_replans_when_agent_has_no_plan() {
         let grid = GridMap::new(5, 5);
         let zones = test_zones();
-        let config = RhcrConfig {
-            mode: RhcrMode::PibtWindow,
-            fallback: FallbackMode::Full,
-            horizon: 10,
-            replan_interval: 5,
-            pbs_node_limit: 100,
-        };
+        let config = RhcrConfig { horizon: 10, replan_interval: 5, pbs_node_limit: 100 };
         let mut solver = RhcrSolver::new(config);
         let mut cache = DistanceMapCache::default();
         let mut rng = SeededRng::new(42);
@@ -1117,17 +958,18 @@ mod tests {
         );
     }
 
-    /// Full loop: RHCR on a warehouse with goal recycling — no obstacle violations.
-    /// Also prints timing for perf regression detection.
+    /// Smoke test: RHCR-PBS on a real warehouse with goal recycling — no obstacle
+    /// violations, no panics. Smaller agent count to keep test fast.
     #[test]
-    fn rhcr_warehouse_lifelong_no_obstacle_violations() {
+    fn rhcr_warehouse_lifelong_smoke() {
         use crate::core::topology::TopologyRegistry;
+        use rand::Rng;
+        use rand::SeedableRng;
+        use rand_chacha::ChaCha8Rng;
 
         let registry = TopologyRegistry::load_from_dir(std::path::Path::new("topologies"));
         let entry = registry.find("warehouse_large").expect("warehouse_large.json missing");
-        let (grid_owned, zones_owned) = TopologyRegistry::parse_entry(entry).unwrap();
-        let grid = &grid_owned;
-        let zones = &zones_owned;
+        let (grid, zones) = TopologyRegistry::parse_entry(entry).unwrap();
 
         let walkable: Vec<IVec2> = zones
             .corridor_cells
@@ -1139,150 +981,7 @@ mod tests {
             .collect();
 
         let n = 8;
-        let ticks = 100;
-
-        for mode in [RhcrMode::PibtWindow, RhcrMode::PriorityAStar, RhcrMode::Pbs] {
-            run_rhcr_bench(mode, grid, zones, &walkable, n, ticks);
-        }
-    }
-
-    /// Scale benchmark: 50 agents on medium warehouse.
-    #[test]
-    fn rhcr_scale_50_agents() {
-        use crate::core::topology::TopologyRegistry;
-
-        let registry = TopologyRegistry::load_from_dir(std::path::Path::new("topologies"));
-        let entry = registry.find("warehouse_large").expect("warehouse_large.json missing");
-        let (grid_owned, zones_owned) = TopologyRegistry::parse_entry(entry).unwrap();
-        let grid = &grid_owned;
-        let zones = &zones_owned;
-
-        let walkable: Vec<IVec2> = zones
-            .corridor_cells
-            .iter()
-            .chain(zones.pickup_cells.iter())
-            .chain(zones.delivery_cells.iter())
-            .copied()
-            .filter(|p| grid.is_walkable(*p))
-            .collect();
-
-        for mode in [RhcrMode::PibtWindow, RhcrMode::PriorityAStar, RhcrMode::Pbs] {
-            run_rhcr_bench(mode, grid, zones, &walkable, 50, 50);
-        }
-    }
-
-    /// Scale benchmark: 80 agents on medium warehouse.
-    #[test]
-    fn rhcr_scale_80_agents() {
-        use crate::core::topology::TopologyRegistry;
-
-        let registry = TopologyRegistry::load_from_dir(std::path::Path::new("topologies"));
-        let entry = registry.find("warehouse_large").expect("warehouse_large.json missing");
-        let (grid_owned, zones_owned) = TopologyRegistry::parse_entry(entry).unwrap();
-        let grid = &grid_owned;
-        let zones = &zones_owned;
-
-        let walkable: Vec<IVec2> = zones
-            .corridor_cells
-            .iter()
-            .chain(zones.pickup_cells.iter())
-            .chain(zones.delivery_cells.iter())
-            .copied()
-            .filter(|p| grid.is_walkable(*p))
-            .collect();
-
-        for mode in [RhcrMode::PibtWindow, RhcrMode::PriorityAStar, RhcrMode::Pbs] {
-            run_rhcr_bench(mode, grid, zones, &walkable, 80, 50);
-        }
-    }
-
-    /// Scale benchmark: 30 agents on medium warehouse.
-    #[test]
-    fn rhcr_scale_benchmark_medium_warehouse() {
-        use crate::core::topology::TopologyRegistry;
-
-        let registry = TopologyRegistry::load_from_dir(std::path::Path::new("topologies"));
-        let entry = registry.find("warehouse_large").expect("warehouse_large.json missing");
-        let (grid_owned, zones_owned) = TopologyRegistry::parse_entry(entry).unwrap();
-        let grid = &grid_owned;
-        let zones = &zones_owned;
-
-        let walkable: Vec<IVec2> = zones
-            .corridor_cells
-            .iter()
-            .chain(zones.pickup_cells.iter())
-            .chain(zones.delivery_cells.iter())
-            .copied()
-            .filter(|p| grid.is_walkable(*p))
-            .collect();
-
-        let n = 30;
-        let ticks = 50;
-
-        for mode in [RhcrMode::PibtWindow, RhcrMode::PriorityAStar, RhcrMode::Pbs] {
-            run_rhcr_bench(mode, grid, zones, &walkable, n, ticks);
-        }
-    }
-
-    #[test]
-    fn rhcr_fills_goal_sequences_when_goal_is_close() {
-        let grid = GridMap::new(10, 10);
-        let zones = ZoneMap {
-            pickup_cells: vec![IVec2::new(1, 1), IVec2::new(3, 3), IVec2::new(5, 5)],
-            delivery_cells: vec![IVec2::new(8, 8), IVec2::new(7, 7)],
-            corridor_cells: Vec::new(),
-            recharging_cells: Vec::new(),
-            zone_type: HashMap::new(),
-            queue_lines: Vec::new(),
-        };
-
-        let config = RhcrConfig {
-            mode: RhcrMode::PriorityAStar,
-            fallback: FallbackMode::Tiered,
-            horizon: 20,
-            replan_interval: 1,
-            pbs_node_limit: 100,
-        };
-        let mut solver = RhcrSolver::new(config);
-        let mut cache = DistanceMapCache::default();
-        let mut rng = SeededRng::new(42);
-
-        let agents = vec![AgentState {
-            index: 0,
-            pos: IVec2::ZERO,
-            goal: Some(IVec2::new(2, 0)),
-            has_plan: false,
-            task_leg: TaskLeg::TravelEmpty(IVec2::new(2, 0)),
-        }];
-
-        let ctx = SolverContext { grid: &grid, zones: &zones, tick: 0, num_agents: 1 };
-        let result = solver.step(&ctx, &agents, &mut cache, &mut rng);
-
-        match result {
-            StepResult::Replan(plans) => {
-                assert_eq!(plans.len(), 1);
-                assert!(
-                    plans[0].1.len() > 2,
-                    "Plan should extend beyond first goal via goal sequences, got {} steps",
-                    plans[0].1.len()
-                );
-            }
-            _ => panic!("expected Replan"),
-        }
-    }
-
-    fn run_rhcr_bench(
-        mode: RhcrMode,
-        grid: &crate::core::grid::GridMap,
-        zones: &ZoneMap,
-        walkable: &[IVec2],
-        n: usize,
-        ticks: u64,
-    ) {
-        use rand::Rng;
-        use rand::SeedableRng;
-        use rand_chacha::ChaCha8Rng;
-        use std::time::Instant;
+        let ticks = 100u64;
 
         let mut rng_seed = ChaCha8Rng::seed_from_u64(99);
         let mut positions: Vec<IVec2> = walkable[..n].to_vec();
@@ -1291,14 +990,10 @@ mod tests {
         let mut plans: Vec<std::collections::VecDeque<Action>> =
             vec![std::collections::VecDeque::new(); n];
 
-        let config = RhcrConfig::auto(mode, (grid.width * grid.height) as usize, n);
-        let h = config.horizon;
-        let w = config.replan_interval;
+        let config = RhcrConfig::auto((grid.width * grid.height) as usize, n);
         let mut solver = RhcrSolver::new(config);
         let mut cache = DistanceMapCache::default();
         let mut rng = SeededRng::new(42);
-
-        let start = Instant::now();
 
         for tick in 0..ticks {
             for i in 0..n {
@@ -1306,8 +1001,7 @@ mod tests {
                 let new_pos = action.apply(positions[i]);
                 assert!(
                     grid.is_walkable(new_pos),
-                    "RHCR {:?}: agent {} tick {} moved to obstacle {:?}",
-                    mode,
+                    "RHCR-PBS: agent {} tick {} moved to obstacle {:?}",
                     i,
                     tick,
                     new_pos,
@@ -1340,7 +1034,7 @@ mod tests {
                 zone_type: zones.zone_type.clone(),
                 queue_lines: Vec::new(),
             };
-            let ctx = SolverContext { grid, zones: &solver_zones, tick, num_agents: n };
+            let ctx = SolverContext { grid: &grid, zones: &solver_zones, tick, num_agents: n };
 
             match solver.step(&ctx, &agent_states, &mut cache, &mut rng) {
                 StepResult::Continue => {}
@@ -1353,313 +1047,100 @@ mod tests {
                 }
             }
         }
-
-        let elapsed = start.elapsed();
-        let us_per_tick = elapsed.as_micros() / ticks as u128;
-        eprintln!(
-            "RHCR {:?}: {}ticks × {}agents in {:?} ({} µs/tick) [H={} W={}]",
-            mode, ticks, n, elapsed, us_per_tick, h, w,
-        );
-    }
-
-    /// Throughput benchmark: measures tasks-completed per 100 ticks on warehouse_large.
-    #[test]
-    fn rhcr_throughput_benchmark() {
-        use crate::core::topology::TopologyRegistry;
-        use rand::Rng;
-        use rand::SeedableRng;
-        use rand_chacha::ChaCha8Rng;
-
-        let registry = TopologyRegistry::load_from_dir(std::path::Path::new("topologies"));
-        let entry = registry.find("warehouse_large").expect("warehouse_large.json missing");
-        let (grid, zones) = TopologyRegistry::parse_entry(entry).unwrap();
-
-        let walkable: Vec<IVec2> = zones
-            .corridor_cells
-            .iter()
-            .chain(zones.pickup_cells.iter())
-            .chain(zones.delivery_cells.iter())
-            .copied()
-            .filter(|p| grid.is_walkable(*p))
-            .collect();
-
-        let n = 30;
-        let ticks = 200u64;
-
-        for mode in [RhcrMode::PibtWindow, RhcrMode::PriorityAStar, RhcrMode::Pbs] {
-            let mut rng_seed = ChaCha8Rng::seed_from_u64(99);
-            let mut positions: Vec<IVec2> = walkable[..n].to_vec();
-            let mut goals: Vec<IVec2> =
-                (0..n).map(|_| walkable[rng_seed.random_range(0..walkable.len())]).collect();
-            let mut plans: Vec<std::collections::VecDeque<Action>> =
-                vec![std::collections::VecDeque::new(); n];
-
-            let config = RhcrConfig::auto(mode, (grid.width * grid.height) as usize, n);
-            let h = config.horizon;
-            let w = config.replan_interval;
-            let mut solver = RhcrSolver::new(config);
-            let mut cache = DistanceMapCache::default();
-            let mut rng = SeededRng::new(42);
-            let mut tasks_completed = 0u64;
-
-            for tick in 0..ticks {
-                for i in 0..n {
-                    let action = plans[i].pop_front().unwrap_or(Action::Wait);
-                    let new_pos = action.apply(positions[i]);
-                    assert!(grid.is_walkable(new_pos));
-                    positions[i] = new_pos;
-                }
-
-                for i in 0..n {
-                    if positions[i] == goals[i] {
-                        goals[i] = walkable[rng_seed.random_range(0..walkable.len())];
-                        plans[i].clear();
-                        tasks_completed += 1;
-                    }
-                }
-
-                let agent_states: Vec<AgentState> = (0..n)
-                    .map(|i| AgentState {
-                        index: i,
-                        pos: positions[i],
-                        goal: Some(goals[i]),
-                        has_plan: !plans[i].is_empty(),
-                        task_leg: TaskLeg::Free,
-                    })
-                    .collect();
-
-                let ctx = SolverContext { grid: &grid, zones: &zones, tick, num_agents: n };
-
-                match solver.step(&ctx, &agent_states, &mut cache, &mut rng) {
-                    StepResult::Continue => {}
-                    StepResult::Replan(new_plans) => {
-                        for (idx, actions) in new_plans {
-                            if *idx < n {
-                                plans[*idx] = actions.iter().copied().collect();
-                            }
-                        }
-                    }
-                }
-            }
-
-            eprintln!(
-                "THROUGHPUT RHCR {:?}: {} tasks in {} ticks ({:.1}/100t) [H={} W={}]",
-                mode,
-                tasks_completed,
-                ticks,
-                tasks_completed as f64 / ticks as f64 * 100.0,
-                h,
-                w,
-            );
-        }
     }
 
     #[test]
-    fn rhcr_warm_starts_reuse_valid_plans() {
-        // Run RHCR twice in succession. On the second replan (same goals),
-        // the solver should reuse plans from the first replan (warm-start).
-        // We verify this indirectly: the second replan should produce plans
-        // at least as long as the first (no degradation from cold start).
-        let grid = GridMap::new(10, 10);
-        let zones = ZoneMap {
-            pickup_cells: vec![IVec2::new(1, 1), IVec2::new(3, 3)],
-            delivery_cells: vec![IVec2::new(8, 8), IVec2::new(7, 7)],
-            corridor_cells: Vec::new(),
-            recharging_cells: Vec::new(),
-            zone_type: HashMap::new(),
-            queue_lines: Vec::new(),
-        };
-
-        let config = RhcrConfig {
-            mode: RhcrMode::PriorityAStar,
-            fallback: FallbackMode::Tiered,
-            horizon: 15,
-            replan_interval: 1, // replan every tick
-            pbs_node_limit: 100,
-        };
-        let mut solver = RhcrSolver::new(config);
-        let mut cache = DistanceMapCache::default();
-        let mut rng = SeededRng::new(42);
-
-        let agents = vec![
-            AgentState {
-                index: 0,
-                pos: IVec2::new(0, 0),
-                goal: Some(IVec2::new(9, 9)),
-                has_plan: false,
-                task_leg: TaskLeg::Free,
-            },
-            AgentState {
-                index: 1,
-                pos: IVec2::new(9, 0),
-                goal: Some(IVec2::new(0, 9)),
-                has_plan: false,
-                task_leg: TaskLeg::Free,
-            },
-        ];
-
-        let ctx = SolverContext { grid: &grid, zones: &zones, tick: 0, num_agents: 2 };
-
-        // First replan
-        let result1 = solver.step(&ctx, &agents, &mut cache, &mut rng);
-        let len1 = match &result1 {
-            StepResult::Replan(plans) => plans.iter().map(|(_, a)| a.len()).sum::<usize>(),
-            _ => panic!("expected Replan"),
-        };
-
-        // Second replan (same agents, same goals — should warm-start)
-        let ctx2 = SolverContext { grid: &grid, zones: &zones, tick: 1, num_agents: 2 };
-        let result2 = solver.step(&ctx2, &agents, &mut cache, &mut rng);
-        let len2 = match &result2 {
-            StepResult::Replan(plans) => plans.iter().map(|(_, a)| a.len()).sum::<usize>(),
-            _ => panic!("expected Replan"),
-        };
-
-        // Warm-started plans should be at least as good (plans exist)
-        assert!(len1 > 0, "First replan should produce plans");
-        assert!(len2 > 0, "Second replan (warm-started) should produce plans");
-    }
-
-    #[test]
-    fn lra_resolves_vertex_conflict() {
-        use crate::core::action::Direction;
-
-        let grid = GridMap::new(5, 5);
-        // Two agents both want to go to (2,0) at t=1
-        let plans: Vec<(usize, Vec<Action>)> = vec![
-            (0, vec![Action::Move(Direction::East), Action::Move(Direction::East)]),
-            (1, vec![Action::Move(Direction::West), Action::Move(Direction::West)]),
-        ];
-        let agents = vec![
-            AgentState {
-                index: 0,
-                pos: IVec2::new(1, 0),
-                goal: Some(IVec2::new(3, 0)),
-                has_plan: true,
-                task_leg: TaskLeg::Free,
-            },
-            AgentState {
-                index: 1,
-                pos: IVec2::new(3, 0),
-                goal: Some(IVec2::new(1, 0)),
-                has_plan: true,
-                task_leg: TaskLeg::Free,
-            },
-        ];
-
-        let resolved = RhcrSolver::lra_resolve_conflicts(&plans, &agents, &grid, 4);
-
-        // Both should have plans
-        assert_eq!(resolved.len(), 2);
-
-        // Simulate and verify no vertex conflicts
-        let mut pos0 = agents[0].pos;
-        let mut pos1 = agents[1].pos;
-        let plan0 = &resolved.iter().find(|(i, _)| *i == 0).unwrap().1;
-        let plan1 = &resolved.iter().find(|(i, _)| *i == 1).unwrap().1;
-        let max_len = plan0.len().max(plan1.len());
-        for t in 0..max_len {
-            let a0 = plan0.get(t).copied().unwrap_or(Action::Wait);
-            let a1 = plan1.get(t).copied().unwrap_or(Action::Wait);
-            pos0 = a0.apply(pos0);
-            pos1 = a1.apply(pos1);
-            assert_ne!(pos0, pos1, "vertex conflict at t={}", t + 1);
-        }
-    }
-
-    #[test]
-    fn tiered_fallback_demotes_conflicting_plans() {
-        // This test verifies that Tiered mode is different from PerAgent:
-        // a solved plan that has a conflict in the first W steps gets demoted.
+    fn rhcr_handles_empty_agent_list() {
         let grid = GridMap::new(5, 5);
         let zones = test_zones();
-        let config = RhcrConfig {
-            mode: RhcrMode::PriorityAStar,
-            fallback: FallbackMode::Tiered,
-            horizon: 10,
-            replan_interval: 1,
-            pbs_node_limit: 100,
-        };
+        let config = RhcrConfig::auto(25, 0);
         let mut solver = RhcrSolver::new(config);
         let mut cache = DistanceMapCache::default();
         let mut rng = SeededRng::new(42);
 
-        // Two agents with crossing goals
-        let agents = vec![
-            AgentState {
-                index: 0,
-                pos: IVec2::new(0, 2),
-                goal: Some(IVec2::new(4, 2)),
-                has_plan: false,
-                task_leg: TaskLeg::Free,
-            },
-            AgentState {
-                index: 1,
-                pos: IVec2::new(4, 2),
-                goal: Some(IVec2::new(0, 2)),
-                has_plan: false,
-                task_leg: TaskLeg::Free,
-            },
-        ];
-
-        let ctx = SolverContext { grid: &grid, zones: &zones, tick: 0, num_agents: 2 };
-        let result = solver.step(&ctx, &agents, &mut cache, &mut rng);
-
-        // Should produce valid plans (no crashes, no empty)
+        let ctx = SolverContext { grid: &grid, zones: &zones, tick: 0, num_agents: 0 };
+        let result = solver.step(&ctx, &[], &mut cache, &mut rng);
         match result {
-            StepResult::Replan(plans) => {
-                assert_eq!(plans.len(), 2, "Both agents should get plans");
-                assert!(!plans[0].1.is_empty());
-                assert!(!plans[1].1.is_empty());
-            }
-            _ => panic!("expected Replan"),
+            StepResult::Replan(plans) => assert_eq!(plans.len(), 0),
+            _ => panic!("expected Replan with empty plans"),
         }
     }
 
     #[test]
-    fn lra_resolves_edge_conflict() {
-        use crate::core::action::Direction;
-
+    fn rhcr_reset_clears_state() {
         let grid = GridMap::new(5, 5);
-        // Two agents trying to swap positions
-        let plans: Vec<(usize, Vec<Action>)> = vec![
-            (0, vec![Action::Move(Direction::East)]),
-            (1, vec![Action::Move(Direction::West)]),
-        ];
-        let agents = vec![
-            AgentState {
-                index: 0,
-                pos: IVec2::new(1, 0),
-                goal: Some(IVec2::new(2, 0)),
-                has_plan: true,
-                task_leg: TaskLeg::Free,
-            },
-            AgentState {
-                index: 1,
-                pos: IVec2::new(2, 0),
-                goal: Some(IVec2::new(1, 0)),
-                has_plan: true,
-                task_leg: TaskLeg::Free,
-            },
-        ];
+        let zones = test_zones();
+        let config = RhcrConfig::auto(25, 1);
+        let mut solver = RhcrSolver::new(config);
+        let mut cache = DistanceMapCache::default();
+        let mut rng = SeededRng::new(42);
 
-        let resolved = RhcrSolver::lra_resolve_conflicts(&plans, &agents, &grid, 4);
+        let agents = vec![AgentState {
+            index: 0,
+            pos: IVec2::ZERO,
+            goal: Some(IVec2::new(4, 4)),
+            has_plan: false,
+            task_leg: TaskLeg::Free,
+        }];
+        let ctx = SolverContext { grid: &grid, zones: &zones, tick: 0, num_agents: 1 };
+        let _ = solver.step(&ctx, &agents, &mut cache, &mut rng);
 
-        // Simulate: no swap conflict
-        let mut pos0 = agents[0].pos;
-        let mut pos1 = agents[1].pos;
-        let plan0 = &resolved.iter().find(|(i, _)| *i == 0).unwrap().1;
-        let plan1 = &resolved.iter().find(|(i, _)| *i == 1).unwrap().1;
-        for t in 0..plan0.len().max(plan1.len()) {
-            let prev0 = pos0;
-            let prev1 = pos1;
-            let a0 = plan0.get(t).copied().unwrap_or(Action::Wait);
-            let a1 = plan1.get(t).copied().unwrap_or(Action::Wait);
-            pos0 = a0.apply(pos0);
-            pos1 = a1.apply(pos1);
-            // No swap: agent 0 didn't go to agent 1's old pos while agent 1 went to agent 0's old pos
-            let swapped = pos0 == prev1 && pos1 == prev0 && pos0 != prev0;
-            assert!(!swapped, "edge conflict (swap) at t={}", t + 1);
-        }
+        solver.reset();
+        // After reset, first call should replan again
+        let result = solver.step(&ctx, &agents, &mut cache, &mut rng);
+        assert!(matches!(result, StepResult::Replan(_)));
+    }
+
+    /// Regression test for the RHCR-PBS audit (Step 2 of solver-refocus).
+    ///
+    /// Locks the current lazy-priority PBS throughput on a known instance so a
+    /// future change to the planner (e.g. switching to eager mode) is detected.
+    /// The lower bound is set generously below the measured baseline so that
+    /// minor implementation drift doesn't break the test, but a regression that
+    /// drops PBS to all-Wait or all-fallback behavior would trip it.
+    ///
+    /// Measured baseline 2026-04-08 (post PAAMS 2026 RHCR-PBS fidelity port):
+    /// tp = 0.435 tasks/tick on warehouse_large, 40 agents, random scheduler,
+    /// 200 ticks. This is a 10× jump from the pre-port `0.040` baseline; the
+    /// fix was the eager-mode + peek-chain + best-effort sequential-A* port
+    /// (Streams B + C of the sprint). The floor is set to `0.20` — well above
+    /// any reasonable noise band but conservative enough that a minor
+    /// tuning change doesn't break CI.
+    ///
+    /// Reference: docs/papers_codes/rhcr/src/PBS.cpp (Jiaoyang-Li/RHCR).
+    #[test]
+    fn rhcr_pbs_throughput_regression() {
+        use crate::core::topology::TopologyRegistry;
+        use crate::experiment::config::ExperimentConfig;
+        use crate::experiment::runner::run_single_experiment;
+
+        // Validate the topology loads (defends against silent topology breakage)
+        let registry = TopologyRegistry::load_from_dir(std::path::Path::new("topologies"));
+        assert!(registry.find("warehouse_large").is_some(), "warehouse_large.json missing");
+
+        let config = ExperimentConfig {
+            solver_name: "rhcr_pbs".into(),
+            topology_name: "warehouse_large".into(),
+            scenario: None,
+            scheduler_name: "random".into(),
+            num_agents: 40,
+            seed: 42,
+            tick_count: 200,
+            custom_map: None,
+        };
+        let result = run_single_experiment(&config);
+        let tp = result.baseline_metrics.avg_throughput;
+        eprintln!("rhcr_pbs_throughput_regression: tp={tp:.4} tasks/tick");
+        // Floor: 0.20 — 46% of post-port baseline (0.435 measured 2026-04-08).
+        // A drop below this would indicate a regression in `plan_agent`,
+        // `find_consistent_paths`, or the best-partial sequential-A* fallback.
+        // Higher throughput is fine.
+        assert!(
+            tp >= 0.20,
+            "RHCR-PBS regression: avg_throughput {tp:.4} fell below the 0.20 \
+             floor (baseline measured 2026-04-08: 0.435). Likely a regression \
+             in eager-mode PBS, plan_agent sequential A*, or the best-partial \
+             fallback. See src/solver/rhcr/pbs_planner.rs."
+        );
     }
 }

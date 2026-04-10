@@ -28,7 +28,8 @@ pub struct SimAgent {
     pub last_action: Action,
     /// Cumulative movement-tick count for Weibull failure model.
     /// Increments only on Move actions -- captures mechanical wear from distance traveled.
-    /// Basis: encoder/tire wear (73.8% of AGV failures per INASE 2014) is distance-proportional.
+    /// Basis: mechanical wear (encoders, tires, gears) dominates field robot
+    /// failures and is distance-proportional (Carlson & Murphy 2005).
     pub operational_age: u32,
     /// Tick at which this agent's next intermittent fault fires.
     /// None = not yet initialized; sampled lazily on first intermittent fault check.

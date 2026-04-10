@@ -38,6 +38,9 @@ const VERDICT_TIERS = [
 // CSS vars per tier index (0=worst → 3=best): red / orange / yellow / green
 const SC_TIER_VARS = ['var(--sc-poor)', 'var(--sc-low)', 'var(--sc-fair)', 'var(--sc-good)'];
 
+// Layered bar color zones (used by buildLayeredBar for FT Braess overflow)
+const BAR_ZONES = { good: 0.7, fair: 0.4 };
+
 // Fault type colors (single source of truth; must match --fault-* CSS custom properties)
 const FAULT_COLORS = {
     burst_failure:     'rgb(230, 44, 2)',
@@ -101,6 +104,13 @@ const METRIC_KEYS = [
 // Returns { composite, filledDots } where composite is 0-1 and filledDots is 0-5.
 // When NRR is N/A (permanent deaths, no cascade recovery), its weight is
 // redistributed proportionally to the remaining three metrics.
+//
+// ⚠ NOT A RESEARCH-GRADE METRIC. The weights (0.30/0.25/0.25/0.20) are
+// hand-picked for the live observatory dashboard and have no theoretical
+// derivation. Reviewers will (correctly) attack this as an ad-hoc index.
+// Used here only as an at-a-glance UI verdict — DO NOT cite in papers.
+// The PAAMS 2026 paper reports the 5 primary metrics directly, not this
+// composite. See docs/papers/paper1_drafts/paams2026/scope_decisions.md §4.
 function computeCompositeScore(sc) {
     const ft = Math.min(sc.fault_tolerance || 0, 1.0); // Cap FT at 1.0 for composite (Braess doesn't inflate verdict)
     const fur = sc.fleet_utilization || 0;
@@ -2433,9 +2443,13 @@ function populateResultsFromState(s) {
         ];
         scorecardBars.innerHTML = metrics.map(m => {
             const label = m.value != null ? (m.value * 100).toFixed(0) + '%' : 'N/A';
+            // FT uses buildLayeredBar to handle Braess overflow (>100%); others use renderScBar
+            const bar = m.key === 'ft'
+                ? buildLayeredBar(m.value, 8)
+                : renderScBar(m.value, SC_METRIC_CONFIG[m.key], 8);
             return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
                 <span style="width:90px;font-size:10px;color:var(--text-muted);text-transform:uppercase;">${m.name}</span>
-                ${renderScBar(m.value, SC_METRIC_CONFIG[m.key], 8)}
+                ${bar}
                 <span style="width:30px;font-size:10px;color:var(--text-secondary);text-align:right;">${label}</span>
             </div>`;
         }).join('');
@@ -2720,6 +2734,35 @@ function closeContextMenu() {
     ctxMenuAgentId = null;
     ctxMenuCell = null;
     sendCommand({ type: 'clear_selection' });
+}
+
+// ---------------------------------------------------------------------------
+// Layered bar helper — wraps at 100%, stacking layers for overflow (Braess)
+// ---------------------------------------------------------------------------
+// Each layer = 100%. Layer 0 is the current partial fill, layers behind it are
+// fully filled with progressively dimmer opacity to show "how many times 100%".
+// Colors per layer: layer 0 = metric color, layer 1+ = desaturated previous.
+function buildLayeredBar(value, height) {
+    if (value == null) return `<div style="flex:1;height:${height}px;background:var(--bg-card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;"><span style="font-size:8px;color:var(--text-muted);">N/A</span></div>`;
+    const layers = Math.floor(value);    // full 100% layers behind
+    const partial = (value - layers);    // current partial (0-1)
+    const partialPct = (partial * 100).toFixed(1);
+    const baseColor = value >= BAR_ZONES.good ? 'var(--state-moving)' : value >= BAR_ZONES.fair ? 'var(--state-delayed)' : 'var(--state-fault)';
+    // Layer colors: each completed layer gets a slightly different hue
+    const layerColors = ['rgba(74,158,130,0.25)', 'rgba(74,158,130,0.40)', 'rgba(74,158,130,0.55)'];
+    let bgLayers = '';
+    if (layers > 0) {
+        // Stacked gradient: each full layer is a stripe of completed color
+        const stripes = [];
+        for (let i = 0; i < Math.min(layers, 3); i++) {
+            stripes.push(layerColors[i]);
+        }
+        bgLayers = `background:${stripes[stripes.length - 1]};`;
+    }
+    return `<div style="flex:1;height:${height}px;background:var(--bg-card);border:1px solid var(--border);position:relative;overflow:hidden;">` +
+        (layers > 0 ? `<div style="position:absolute;inset:0;${bgLayers}"></div>` : '') +
+        `<div style="position:relative;width:${partialPct}%;height:100%;background:${baseColor};"></div>` +
+    `</div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -4277,7 +4320,6 @@ function bindControls() {
     const rhcrParams = document.getElementById('rhcr-params');
     const rhcrHorizon = document.getElementById('input-rhcr-horizon');
     const rhcrReplan = document.getElementById('input-rhcr-replan');
-    const rhcrFallback = document.getElementById('input-rhcr-fallback');
     const rhcrAutoHint = document.getElementById('rhcr-auto-hint');
 
     function updateRhcrVisibility() {
@@ -4304,11 +4346,6 @@ function bindControls() {
     if (rhcrReplan) {
         rhcrReplan.addEventListener('change', () => {
             sendCommand({ type: 'set_rhcr_replan_interval', value: parseInt(rhcrReplan.value) || 5 });
-        });
-    }
-    if (rhcrFallback) {
-        rhcrFallback.addEventListener('change', () => {
-            sendCommand({ type: 'set_rhcr_fallback', value: rhcrFallback.value });
         });
     }
 
@@ -4885,7 +4922,8 @@ const EXPERIMENT_PRESETS = {
         scenarios: ['burst_20'], agents: '8', seeds: '42, 123', ticks: 50,
     },
     solver: {
-        solvers: ['pibt', 'rhcr_pibt', 'rhcr_priority_astar'], topologies: ['warehouse-medium'],
+        // RHCR (PBS) is desktop-only — excluded from the web sweep.
+        solvers: ['pibt', 'token_passing', 'lacam3_lifelong'], topologies: ['warehouse-medium'],
         schedulers: ['random'], scenarios: ['none', 'burst_20', 'burst_50', 'wear_medium', 'wear_high', 'zone'],
         agents: '40', seeds: '42, 123, 456, 789, 1024', ticks: 500,
     },
@@ -5281,8 +5319,7 @@ let padlockState = null;
 function padlockFormatValue(key, value) {
     const v = String(value);
     if (key === 'solver') {
-        const map = { pibt: 'PIBT', rhcr_pibt: 'RHCR-PIBT', rhcr_priority_astar: 'RHCR-A*',
-            token_passing: 'Token Pass', rhcr_pbs: 'RHCR-PBS' };
+        const map = { pibt: 'PIBT', token_passing: 'Token Pass', rhcr_pbs: 'RHCR-PBS', lacam3_lifelong: 'LaCAM3' };
         return map[v] || v;
     }
     if (key === 'scenario_key') {

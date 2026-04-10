@@ -637,19 +637,22 @@ mod tests {
 
     #[test]
     fn headless_rhcr_solver() {
+        // RHCR-PBS needs higher density + more ticks than PIBT to produce
+        // measurable throughput because PBS node limit (clamp(N*3, 50, max))
+        // constrains low-density planning. Match production density (40 agents, 300 ticks).
         let config = BaselineConfig {
             topology_name: "warehouse_large".into(),
-            num_agents: 6,
-            solver_name: "rhcr_pibt".into(),
+            num_agents: 40,
+            solver_name: "rhcr_pbs".into(),
             scheduler_name: "random".into(),
             seed: 42,
-            tick_count: 60,
+            tick_count: 300,
             grid_override: None,
             fault_enabled: false,
             agent_positions: None,
         };
         let record = run_headless(&config);
-        assert_eq!(record.num_agents, 6);
+        assert_eq!(record.num_agents, 40);
         assert!(record.total_tasks > 0);
     }
 

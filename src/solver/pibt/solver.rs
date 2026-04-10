@@ -3,8 +3,9 @@
 //! Standalone lifelong solver: replans all agents every tick with 1-step plans.
 //! Uses PibtCore for the actual algorithm.
 //!
-//! Reference: Okumura et al., "Priority Inheritance with Backtracking for
-//! Iterative Multi-agent Path Finding" (AAAI 2019).
+//! Reference: Okumura, Machida, Défago, Tamura — "Priority Inheritance with
+//! Backtracking for Iterative Multi-Agent Path Finding", Artificial
+//! Intelligence 310:103752 (2022). Original conference version: IJCAI 2019.
 
 use bevy::prelude::*;
 use smallvec::smallvec;
@@ -64,7 +65,7 @@ impl LifelongSolver for PibtLifelongSolver {
             complexity: "O(n log n) per timestep",
             scalability: Scalability::High,
             description: "PIBT — fast, reactive, one-step planner. Scales to 1000+ agents.",
-            source: "Okumura et al., AAAI 2019",
+            source: "Okumura et al., AIJ 2022",
             recommended_max_agents: None,
         }
     }
@@ -168,7 +169,7 @@ impl MAPFSolver for PibtSolver {
             complexity: "O(n log n) per timestep",
             scalability: Scalability::High,
             description: "Priority Inheritance with Backtracking — fast, reactive, one-step planner. Scales to 1000+ agents with O(n log n) per timestep.",
-            source: "Okumura et al., AAAI 2019",
+            source: "Okumura et al., AIJ 2022",
             recommended_max_agents: None,
         }
     }

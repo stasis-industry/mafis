@@ -256,25 +256,22 @@
                     <div class="panel-divider"></div>
 
                     <div class="input-group"
-                        title="MAPF algorithm used for path planning.">
+                        title="MAPF algorithm used for path planning. RHCR (PBS) is native-only — it needs rayon parallelism that WASM can't provide. Run the desktop build to use RHCR.">
                         <label class="input-label" for="input-solver">Algorithm</label>
                         <select class="input-select" id="input-solver" aria-label="Solver algorithm">
                             <optgroup label="Reactive (suboptimal, fast)">
                                 <option value="pibt">PIBT — Priority Inheritance</option>
                             </optgroup>
-                            <optgroup label="Windowed (suboptimal, planned)">
-                                <option value="rhcr_pbs">RHCR (PBS)</option>
-                                <option value="rhcr_pibt">RHCR (PIBT-Window)</option>
-                                <option value="rhcr_priority_astar">RHCR (Priority A*)</option>
-                            </optgroup>
-                            <optgroup label="Config-Space (suboptimal, global)">
-                                <option value="rt_lacam">RT-LaCAM — Config-Space DFS</option>
-                            </optgroup>
                             <optgroup label="Decentralized (suboptimal, sequential)">
                                 <option value="token_passing">Token Passing</option>
-                                <option value="tpts">TPTS — Token Passing + Swaps</option>
+                            </optgroup>
+                            <optgroup label="Config-Space SOTA (suboptimal, engineered)">
+                                <option value="lacam3_lifelong">LaCAM3 (AAMAS-24)</option>
                             </optgroup>
                         </select>
+                        <div class="input-hint" style="color: var(--text-dim); font-size: 0.75em; margin-top: 4px;">
+                            RHCR (PBS) is desktop-only — needs multi-threaded planning.
+                        </div>
                     </div>
 
                     <!-- RHCR advanced params — shown only when an RHCR variant is selected -->
@@ -286,14 +283,6 @@
                         <div class="input-group" title="Replan interval — ticks between replans (W)">
                             <label class="input-label" for="input-rhcr-replan">Replan (W)</label>
                             <input type="number" class="input-field" id="input-rhcr-replan" min="2" max="40" value="5">
-                        </div>
-                        <div class="input-group" title="Fallback strategy when the windowed planner fails">
-                            <label class="input-label" for="input-rhcr-fallback">Fallback</label>
-                            <select class="input-select" id="input-rhcr-fallback">
-                                <option value="per_agent">Per-Agent</option>
-                                <option value="full">Full</option>
-                                <option value="tiered">Tiered</option>
-                            </select>
                         </div>
                         <div class="input-hint" id="rhcr-auto-hint" style="color: var(--text-dim); font-size: 0.8em; margin-top: 4px;"></div>
                     </div>
@@ -755,7 +744,7 @@
                         <div class="sc-card-value" id="sc-fleet-utilization">1.00</div>
                         <div class="sc-card-bar"><div class="sc-bar-zone sc-bar-poor" style="width:20%"></div><div class="sc-bar-zone sc-bar-low" style="width:20%"></div><div class="sc-bar-zone sc-bar-fair" style="width:20%"></div><div class="sc-bar-zone sc-bar-good" style="width:40%"></div><div class="sc-bar-marker" id="sc-fleet-utilization-marker"></div></div>
                     </div>
-                    <div class="sc-card" title="Fraction of post-fault ticks below 50% baseline throughput (Ghasemieh 2024). Lower = better.">
+                    <div class="sc-card" title="Fraction of post-fault ticks below 50% baseline throughput. Lower = better.">
                         <div class="sc-card-header"><span class="sc-card-label">Critical Time</span><span class="sc-card-zone" id="sc-crit-zone">&mdash;</span></div>
                         <div class="sc-card-value" id="sc-crit">0.00</div>
                         <div class="sc-card-bar"><div class="sc-bar-zone sc-bar-good" style="width:10%"></div><div class="sc-bar-zone sc-bar-fair" style="width:10%"></div><div class="sc-bar-zone sc-bar-low" style="width:20%"></div><div class="sc-bar-zone sc-bar-poor" style="width:60%"></div><div class="sc-bar-marker" id="sc-crit-marker"></div></div>
@@ -975,12 +964,8 @@
                                 <label class="exp-check-label">Solvers</label>
                                 <div class="exp-check-grid" id="exp-solvers">
                                     <label class="checkbox-label"><input type="checkbox" value="pibt" checked><span>PIBT</span></label>
-                                    <label class="checkbox-label"><input type="checkbox" value="rhcr_pibt"><span>RHCR-PIBT</span></label>
-                                    <label class="checkbox-label"><input type="checkbox" value="rhcr_pbs"><span>RHCR-PBS</span></label>
-                                    <label class="checkbox-label"><input type="checkbox" value="rhcr_priority_astar"><span>RHCR-A*</span></label>
                                     <label class="checkbox-label"><input type="checkbox" value="token_passing"><span>Token Passing</span></label>
-                                    <label class="checkbox-label"><input type="checkbox" value="rt_lacam"><span>RT-LaCAM</span></label>
-                                    <label class="checkbox-label"><input type="checkbox" value="tpts"><span>TPTS</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="lacam3_lifelong"><span>LaCAM3</span></label>
                                 </div>
                             </div>
                             <div class="exp-check-group">

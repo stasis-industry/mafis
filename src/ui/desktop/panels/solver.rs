@@ -20,7 +20,7 @@ fn solver_info(id: &str) -> SolverInfo {
             optimality: "Suboptimal",
             scalability: "Excellent",
             description: "Reactive one-step priority inheritance. Replans every tick — fast, handles high density.",
-            source: "Okumura et al., AAAI 2019",
+            source: "Okumura et al., AIJ 2022",
             warning: None,
         },
         "rhcr_pbs" => SolverInfo {
@@ -30,27 +30,6 @@ fn solver_info(id: &str) -> SolverInfo {
             source: "Li et al., AAAI 2021",
             warning: None,
         },
-        "rhcr_pibt" => SolverInfo {
-            optimality: "Suboptimal",
-            scalability: "Good",
-            description: "Rolling-horizon with unrolled PIBT windows. Cooperative multi-step planning.",
-            source: "Li et al., AAAI 2021",
-            warning: None,
-        },
-        "rhcr_priority_astar" => SolverInfo {
-            optimality: "Optimal (per agent)",
-            scalability: "Moderate",
-            description: "Rolling-horizon with sequential spacetime A*. Good for moderate density.",
-            source: "Li et al., AAAI 2021",
-            warning: None,
-        },
-        "rt_lacam" => SolverInfo {
-            optimality: "Suboptimal",
-            scalability: "Excellent",
-            description: "Real-time lazy constraint DFS with PIBT config generator, persistent search, and rerooting.",
-            source: "Liang et al., SoCS 2025",
-            warning: None,
-        },
         "token_passing" => SolverInfo {
             optimality: "Optimal (per agent)",
             scalability: "Limited",
@@ -58,12 +37,12 @@ fn solver_info(id: &str) -> SolverInfo {
             source: "Ma et al., AAMAS 2017",
             warning: Some("Recommended ≤100 agents"),
         },
-        "tpts" => SolverInfo {
-            optimality: "Optimal (per agent)",
-            scalability: "Limited",
-            description: "Token Passing with Task Swaps. A* cost swap evaluation with snapshot/restore.",
-            source: "Ma et al., AAMAS 2017",
-            warning: Some("Recommended ≤100 agents"),
+        "lacam3_lifelong" => SolverInfo {
+            optimality: "Suboptimal",
+            scalability: "Excellent",
+            description: "Engineered LaCAM* (AAMAS 2024) — configuration-space search wrapped in lifelong replan loop. SOTA single-shot MAPF.",
+            source: "Okumura, AAMAS 2024",
+            warning: None,
         },
         _ => SolverInfo {
             optimality: "?",
@@ -97,7 +76,6 @@ pub fn solver_panel(ui: &mut egui::Ui, ui_state: &mut UiState, sim_state: SimSta
                         // Clear RHCR overrides when switching solver
                         ui_state.rhcr_horizon = None;
                         ui_state.rhcr_replan_interval = None;
-                        ui_state.rhcr_fallback = None;
                     }
                 }
             },
@@ -171,24 +149,9 @@ pub fn solver_panel(ui: &mut egui::Ui, ui_state: &mut UiState, sim_state: SimSta
                 }
             });
 
-            // Fallback mode
-            ui.horizontal(|ui| {
-                ui.label("Fallback");
-                let current = ui_state.rhcr_fallback.as_deref().unwrap_or("auto").to_owned();
-                egui::ComboBox::from_id_salt("rhcr_fallback").selected_text(&current).show_ui(
-                    ui,
-                    |ui| {
-                        for mode in &["auto", "per_agent", "full", "tiered"] {
-                            if ui.selectable_label(current == *mode, *mode).clicked() && idle {
-                                ui_state.rhcr_fallback =
-                                    if *mode == "auto" { None } else { Some(mode.to_string()) };
-                            }
-                        }
-                    },
-                );
-            });
-
-            ui.weak("Auto-tuned for current grid and agent count.");
+            ui.weak(
+                "Auto-tuned for current grid and agent count. PBS uses per-agent LRA fallback.",
+            );
         });
     }
 }

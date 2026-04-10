@@ -47,8 +47,7 @@ fn run(
 // 1. Solver × Topology: every solver runs on every topology without panic
 // ═══════════════════════════════════════════════════════════════════════
 
-const SOLVERS: &[&str] =
-    &["pibt", "rhcr_pbs", "rhcr_pibt", "rhcr_priority_astar", "token_passing", "rt_lacam", "tpts"];
+const SOLVERS: &[&str] = &["pibt", "rhcr_pbs", "token_passing", "lacam3_lifelong"];
 
 const TOPOLOGIES: &[(&str, usize)] = &[
     ("warehouse_medium", 15),
@@ -331,7 +330,7 @@ fn deterministic_replay() {
 /// Determinism holds across solvers — not just PIBT.
 #[test]
 fn deterministic_across_solvers() {
-    for &solver in &["rhcr_pibt", "token_passing"] {
+    for &solver in &["rhcr_pbs", "token_passing"] {
         let r1 = run(solver, "warehouse_large", "random", 8, None, 42);
         let r2 = run(solver, "warehouse_large", "random", 8, None, 42);
         assert_eq!(
@@ -378,15 +377,7 @@ fn new_topologies_under_fault() {
 
 #[test]
 fn all_solvers_no_collisions_500_ticks() {
-    let solvers = [
-        "pibt",
-        "rhcr_pibt",
-        "rhcr_pbs",
-        "rhcr_priority_astar",
-        "token_passing",
-        "rt_lacam",
-        "tpts",
-    ];
+    let solvers = ["pibt", "rhcr_pbs", "token_passing", "lacam3_lifelong"];
 
     for solver_name in &solvers {
         let topo = ActiveTopology::from_name("warehouse_large");
@@ -593,15 +584,7 @@ fn rhcr_fallback_collision_free() {
 
 #[test]
 fn determinism_all_solvers_all_schedulers() {
-    let solvers = [
-        "pibt",
-        "rhcr_pibt",
-        "rhcr_pbs",
-        "rhcr_priority_astar",
-        "token_passing",
-        "rt_lacam",
-        "tpts",
-    ];
+    let solvers = ["pibt", "rhcr_pbs", "token_passing", "lacam3_lifelong"];
     let schedulers = ["random", "closest"];
 
     for solver in &solvers {
@@ -1724,17 +1707,9 @@ fn solver_throughput_ordering_sanity() {
 
     let mut throughputs: std::collections::HashMap<&str, f64> = std::collections::HashMap::new();
 
-    let all_8_solvers = [
-        "pibt",
-        "rhcr_pbs",
-        "rhcr_pibt",
-        "rhcr_priority_astar",
-        "token_passing",
-        "rt_lacam",
-        "tpts",
-    ];
+    let all_solvers = ["pibt", "rhcr_pbs", "token_passing", "lacam3_lifelong"];
 
-    for &solver in &all_8_solvers {
+    for &solver in &all_solvers {
         let config = ExperimentConfig {
             solver_name: solver.into(),
             topology_name: "warehouse_large".into(),
@@ -1758,7 +1733,7 @@ fn solver_throughput_ordering_sanity() {
     // All solvers must produce positive throughput on warehouse_large.
     // Exception: rhcr_pbs hits its node limit on larger maps and falls back to
     // per-agent PIBT which can produce zero tasks at low density.
-    for &solver in &all_8_solvers {
+    for &solver in &all_solvers {
         let tp = throughputs[solver];
         if solver == "rhcr_pbs" {
             continue;
@@ -1771,12 +1746,8 @@ fn solver_throughput_ordering_sanity() {
     }
 
     // No solver should collapse to below 1% of the best solver's throughput.
-    // The natural performance spread across paradigms on warehouse_large is
-    // up to ~20× (e.g., Token Passing vs RT-LaCAM). A 1% floor is generous
-    // enough to tolerate this spread while still catching a fully broken solver
-    // that emits nothing but Wait actions.
     let best_tp = throughputs.values().cloned().fold(f64::NEG_INFINITY, f64::max);
-    for &solver in &all_8_solvers {
+    for &solver in &all_solvers {
         if solver == "rhcr_pbs" {
             continue;
         } // PBS hits node limit on large maps
@@ -1789,7 +1760,8 @@ fn solver_throughput_ordering_sanity() {
     }
 
     eprintln!(
-        "  throughput_sanity: all 8 solvers > 0, best={:.3}, floor(1%)={:.4}",
+        "  throughput_sanity: all {} solvers > 0, best={:.3}, floor(1%)={:.4}",
+        all_solvers.len(),
         best_tp,
         best_tp * 0.01
     );
@@ -1804,7 +1776,7 @@ fn solver_throughput_ordering_sanity() {
 /// visited sets, token paths) that would poison the re-run.
 #[test]
 fn rewind_determinism_reset_matches_fresh() {
-    let solvers_with_state = ["pibt", "rhcr_pibt", "rhcr_pbs", "token_passing", "rt_lacam", "tpts"];
+    let solvers_with_state = ["pibt", "rhcr_pbs", "token_passing", "lacam3_lifelong"];
 
     let topo = ActiveTopology::from_name("warehouse_large");
     let output = topo.topology().generate(42);
