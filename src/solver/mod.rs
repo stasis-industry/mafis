@@ -1,12 +1,11 @@
-pub mod lacam3;
 pub mod lifelong;
 pub mod pibt;
 // RHCR is compute-intensive (PBS tree search with O(N × cascade) plan_agent
 // calls per window) and requires rayon parallelism on the root-node build to
 // stay interactive at realistic agent counts. WASM is single-threaded and
 // cannot run rayon, so RHCR is **native-only**. The web build gets PIBT,
-// Token Passing, and LaCAM3 — all of which hit 60 FPS at 200+ agents in
-// WASM. RHCR users should run the desktop build.
+// Token Passing — both of which hit 60 FPS at 200+ agents in WASM.
+// RHCR users should run the desktop build.
 #[cfg(not(target_arch = "wasm32"))]
 pub mod rhcr;
 pub mod shared;
@@ -24,7 +23,6 @@ pub use shared::traits;
 
 use bevy::prelude::*;
 
-use self::lacam3::LaCAM3LifelongSolver;
 use self::lifelong::LifelongSolver;
 use self::pibt::{PibtLifelongSolver, default_active_solver};
 #[cfg(not(target_arch = "wasm32"))]
@@ -47,14 +45,12 @@ pub const SOLVER_NAMES: &[(&str, &str)] = &[
     ("pibt", "PIBT — Priority Inheritance with Backtracking"),
     ("rhcr_pbs", "RHCR (PBS) — Rolling-Horizon with Priority-Based Search"),
     ("token_passing", "Token Passing — Decentralized Sequential Planning"),
-    ("lacam3_lifelong", "LaCAM3 — Engineered LaCAM* (AAMAS 2024) Lifelong Wrapper"),
 ];
 
 #[cfg(target_arch = "wasm32")]
 pub const SOLVER_NAMES: &[(&str, &str)] = &[
     ("pibt", "PIBT — Priority Inheritance with Backtracking"),
     ("token_passing", "Token Passing — Decentralized Sequential Planning"),
-    ("lacam3_lifelong", "LaCAM3 — Engineered LaCAM* (AAMAS 2024) Lifelong Wrapper"),
 ];
 
 /// Create a LifelongSolver by name with auto-computed defaults.
@@ -80,7 +76,6 @@ pub fn lifelong_solver_from_name(
             Some(Box::new(RhcrSolver::new(cfg)))
         }
         "token_passing" => Some(Box::new(TokenPassingSolver::new())),
-        "lacam3_lifelong" => Some(Box::new(LaCAM3LifelongSolver::new())),
         _ => None,
     }
 }
@@ -111,7 +106,6 @@ pub fn lifelong_solver_from_name_sized(
             Some(Box::new(RhcrSolver::with_grid(cfg, grid_w, grid_h)))
         }
         "token_passing" => Some(Box::new(TokenPassingSolver::new())),
-        "lacam3_lifelong" => Some(Box::new(LaCAM3LifelongSolver::new())),
         _ => None,
     }
 }
@@ -156,15 +150,15 @@ mod factory_tests {
 
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
-    fn solver_names_has_four_entries() {
-        // Native: pibt, rhcr_pbs, token_passing, lacam3_lifelong
-        assert_eq!(SOLVER_NAMES.len(), 4);
+    fn solver_names_has_three_entries() {
+        // Native: pibt, rhcr_pbs, token_passing
+        assert_eq!(SOLVER_NAMES.len(), 3);
     }
 
     #[cfg(target_arch = "wasm32")]
     #[test]
-    fn solver_names_has_three_entries_on_wasm() {
+    fn solver_names_has_two_entries_on_wasm() {
         // Web: RHCR excluded (needs rayon for interactive perf)
-        assert_eq!(SOLVER_NAMES.len(), 3);
+        assert_eq!(SOLVER_NAMES.len(), 2);
     }
 }

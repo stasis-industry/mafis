@@ -4921,7 +4921,7 @@ const EXPERIMENT_PRESETS = {
     },
     solver: {
         // RHCR (PBS) is desktop-only — excluded from the web sweep.
-        solvers: ['pibt', 'token_passing', 'lacam3_lifelong'], topologies: ['warehouse-medium'],
+        solvers: ['pibt', 'token_passing'], topologies: ['warehouse-medium'],
         schedulers: ['random'], scenarios: ['none', 'burst_20', 'burst_50', 'wear_medium', 'wear_high', 'zone'],
         agents: '40', seeds: '42, 123, 456, 789, 1024', ticks: 500,
     },
@@ -5317,7 +5317,7 @@ let padlockState = null;
 function padlockFormatValue(key, value) {
     const v = String(value);
     if (key === 'solver') {
-        const map = { pibt: 'PIBT', token_passing: 'Token Pass', rhcr_pbs: 'RHCR-PBS', lacam3_lifelong: 'LaCAM3' };
+        const map = { pibt: 'PIBT', token_passing: 'Token Pass', rhcr_pbs: 'RHCR-PBS' };
         return map[v] || v;
     }
     if (key === 'scenario_key') {

@@ -47,21 +47,18 @@ SOLVER_ORDER = [
     "pibt",
     "rhcr_pbs",
     "token_passing",
-    "lacam3_lifelong",
 ]
 
 SOLVER_LABEL = {
     "pibt":            "PIBT",
     "rhcr_pbs":        "RHCR-PBS",
     "token_passing":   "Token Passing",
-    "lacam3_lifelong": "LaCAM3",
 }
 
 SOLVER_COLORS = {
     "pibt":            "#e07b39",
     "rhcr_pbs":        "#5cb85c",
     "token_passing":   "#e74c3c",
-    "lacam3_lifelong": "#9b59b6",
 }
 
 DENSITY_ORDER = [10, 20, 40, 80]
