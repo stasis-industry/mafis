@@ -62,38 +62,38 @@ fn run_ticks(
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
-fn scale_pibt_200_agents_warehouse_large() {
-    let (tasks, alive) = run_ticks("pibt", "warehouse_large", 200, 300, 42);
+fn scale_pibt_200_agents_warehouse_single_dock() {
+    let (tasks, alive) = run_ticks("pibt", "warehouse_single_dock", 200, 300, 42);
     assert!(alive > 0, "all agents dead with no faults");
-    eprintln!("  pibt/warehouse_large/200 agents: {tasks} tasks, {alive} alive");
+    eprintln!("  pibt/warehouse_single_dock/200 agents: {tasks} tasks, {alive} alive");
 }
 
 #[test]
-fn scale_pibt_300_agents_kiva_warehouse() {
-    let (tasks, alive) = run_ticks("pibt", "kiva_warehouse", 300, 300, 42);
+fn scale_pibt_300_agents_warehouse_dual_dock() {
+    let (tasks, alive) = run_ticks("pibt", "warehouse_dual_dock", 300, 300, 42);
     assert!(alive > 0, "all agents dead with no faults");
-    eprintln!("  pibt/kiva_warehouse/300 agents: {tasks} tasks, {alive} alive");
+    eprintln!("  pibt/warehouse_dual_dock/300 agents: {tasks} tasks, {alive} alive");
 }
 
 #[test]
-fn scale_rhcr_pbs_150_agents_warehouse_large() {
-    let (tasks, alive) = run_ticks("rhcr_pbs", "warehouse_large", 150, 300, 42);
+fn scale_rhcr_pbs_150_agents_warehouse_single_dock() {
+    let (tasks, alive) = run_ticks("rhcr_pbs", "warehouse_single_dock", 150, 300, 42);
     assert!(alive > 0, "all agents dead with no faults");
-    eprintln!("  rhcr_pbs/warehouse_large/150 agents: {tasks} tasks, {alive} alive");
+    eprintln!("  rhcr_pbs/warehouse_single_dock/150 agents: {tasks} tasks, {alive} alive");
 }
 
 #[test]
-fn scale_pibt_80_agents_kiva_warehouse() {
-    let (tasks, alive) = run_ticks("pibt", "kiva_warehouse", 80, 300, 42);
+fn scale_pibt_80_agents_warehouse_dual_dock() {
+    let (tasks, alive) = run_ticks("pibt", "warehouse_dual_dock", 80, 300, 42);
     assert!(alive > 0, "all agents dead with no faults");
-    eprintln!("  pibt/kiva_warehouse/80 agents: {tasks} tasks, {alive} alive");
+    eprintln!("  pibt/warehouse_dual_dock/80 agents: {tasks} tasks, {alive} alive");
 }
 
 #[test]
-fn scale_rhcr_pbs_80_agents_kiva_warehouse() {
-    let (tasks, alive) = run_ticks("rhcr_pbs", "kiva_warehouse", 80, 300, 42);
+fn scale_rhcr_pbs_80_agents_warehouse_dual_dock() {
+    let (tasks, alive) = run_ticks("rhcr_pbs", "warehouse_dual_dock", 80, 300, 42);
     assert!(alive > 0, "all agents dead with no faults");
-    eprintln!("  rhcr_pbs/kiva_warehouse/80 agents: {tasks} tasks, {alive} alive");
+    eprintln!("  rhcr_pbs/warehouse_dual_dock/80 agents: {tasks} tasks, {alive} alive");
 }
 
 #[test]
@@ -104,10 +104,10 @@ fn scale_pibt_120_agents_fullfilment_center() {
 }
 
 #[test]
-fn scale_pibt_60_agents_warehouse_large() {
-    let (tasks, alive) = run_ticks("pibt", "warehouse_large", 60, 300, 42);
+fn scale_pibt_60_agents_warehouse_single_dock() {
+    let (tasks, alive) = run_ticks("pibt", "warehouse_single_dock", 60, 300, 42);
     assert!(alive > 0, "all agents dead with no faults");
-    eprintln!("  pibt/warehouse_large/60 agents: {tasks} tasks, {alive} alive");
+    eprintln!("  pibt/warehouse_single_dock/60 agents: {tasks} tasks, {alive} alive");
 }
 
 // ═══════════════════════════════════════════════════════════════════════

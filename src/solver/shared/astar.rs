@@ -440,7 +440,7 @@ impl SpacetimeGrid {
 ///
 /// **Dirty-list reset** (RHCR-PBS perf sprint 2026-04-09): tracks touched
 /// cells in `dirty` and walks that list on reset instead of memset-ing the
-/// full `best_g` / `closed` arrays. For a warehouse_large (1881 × 9 × 16)
+/// full `best_g` / `closed` arrays. For a warehouse_single_dock (1881 × 9 × 16)
 /// call this drops reset cost from ~3 MB of stores to ~|expansions| stores
 /// — a ~250× reduction when `PBS_ASTAR_BUDGET` caps expansions at 2000.
 pub struct SeqGoalGrid {

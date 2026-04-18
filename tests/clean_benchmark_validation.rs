@@ -9,7 +9,7 @@
 //! cargo test --release --test clean_benchmark_validation -- --ignored --nocapture
 //! ```
 //!
-//! ## Expected ranking on warehouse_large, n=40 agents, no faults, seed 42, 500 ticks
+//! ## Expected ranking on warehouse_single_dock, n=40 agents, no faults, seed 42, 500 ticks
 //!
 //! After the 2026-04-08 RHCR-PBS faithful port (eager mode + peek-chain +
 //! best-effort sequential A*), the ranking is:
@@ -45,7 +45,7 @@
 use mafis::experiment::config::ExperimentConfig;
 use mafis::experiment::runner::run_single_experiment;
 
-const TOPOLOGY: &str = "warehouse_large";
+const TOPOLOGY: &str = "warehouse_single_dock";
 const NUM_AGENTS: usize = 40;
 const TICK_COUNT: u64 = 500;
 const SEED: u64 = 42;

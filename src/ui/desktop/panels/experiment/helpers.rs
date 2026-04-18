@@ -31,7 +31,7 @@ pub struct PresetConfig {
 fn preset_solver_resilience() -> PresetConfig {
     PresetConfig {
         solvers: vec!["pibt".into(), "rhcr_pbs".into(), "token_passing".into()],
-        topologies: vec!["warehouse_large".into()],
+        topologies: vec!["warehouse_single_dock".into()],
         schedulers: vec!["random".into()],
         agent_counts: "40".into(),
         seeds: "42, 123, 456, 789, 1024".into(),
@@ -43,7 +43,7 @@ fn preset_solver_resilience() -> PresetConfig {
 fn preset_scale_sensitivity() -> PresetConfig {
     PresetConfig {
         solvers: vec!["pibt".into()],
-        topologies: vec!["warehouse_large".into()],
+        topologies: vec!["warehouse_single_dock".into()],
         schedulers: vec!["random".into()],
         agent_counts: "10, 20, 40, 80".into(),
         seeds: "42, 123, 456, 789, 1024".into(),
@@ -55,7 +55,7 @@ fn preset_scale_sensitivity() -> PresetConfig {
 fn preset_scheduler_effect() -> PresetConfig {
     PresetConfig {
         solvers: vec!["pibt".into()],
-        topologies: vec!["warehouse_large".into()],
+        topologies: vec!["warehouse_single_dock".into()],
         schedulers: vec!["random".into(), "closest".into()],
         agent_counts: "40".into(),
         seeds: "42, 123, 456, 789, 1024".into(),
@@ -67,7 +67,7 @@ fn preset_scheduler_effect() -> PresetConfig {
 fn preset_smoke_test() -> PresetConfig {
     PresetConfig {
         solvers: vec!["pibt".into()],
-        topologies: vec!["warehouse_large".into()],
+        topologies: vec!["warehouse_single_dock".into()],
         schedulers: vec!["random".into()],
         agent_counts: "8".into(),
         seeds: "42, 123".into(),
@@ -146,16 +146,16 @@ pub fn sortable_header(
 // ---------------------------------------------------------------------------
 
 /// The metric columns shown in the results table.
+/// First 6 = primary differential metrics, then context + timing.
 pub const TABLE_METRICS: &[MetricColumn] = &[
     MetricColumn::FaultTolerance,
-    MetricColumn::Throughput,
     MetricColumn::CriticalTime,
+    MetricColumn::Itae,
+    MetricColumn::AttackRate,
+    MetricColumn::CascadeDepth,
+    MetricColumn::Rapidity,
+    MetricColumn::Throughput,
     MetricColumn::SurvivalRate,
-    MetricColumn::ThroughputRecovery,
-    MetricColumn::UnassignedRatio,
-    MetricColumn::ImpactedArea,
-    MetricColumn::TotalTasks,
-    MetricColumn::DeficitIntegral,
     MetricColumn::SolverStepUs,
     MetricColumn::WallTimeMs,
 ];

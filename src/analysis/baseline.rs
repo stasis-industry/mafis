@@ -579,7 +579,7 @@ mod tests {
     #[test]
     fn headless_small_warehouse_completes() {
         let config = BaselineConfig {
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             num_agents: 8,
             solver_name: "pibt".into(),
             scheduler_name: "random".into(),
@@ -600,7 +600,7 @@ mod tests {
     #[test]
     fn headless_deterministic_same_seed() {
         let config = BaselineConfig {
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             num_agents: 10,
             solver_name: "pibt".into(),
             scheduler_name: "random".into(),
@@ -620,7 +620,7 @@ mod tests {
     #[test]
     fn headless_zero_agents() {
         let config = BaselineConfig {
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             num_agents: 0,
             solver_name: "pibt".into(),
             scheduler_name: "random".into(),
@@ -641,7 +641,7 @@ mod tests {
         // measurable throughput because PBS node limit (clamp(N*3, 50, max))
         // constrains low-density planning. Match production density (40 agents, 300 ticks).
         let config = BaselineConfig {
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             num_agents: 40,
             solver_name: "rhcr_pbs".into(),
             scheduler_name: "random".into(),
@@ -659,7 +659,7 @@ mod tests {
     #[test]
     fn headless_token_passing_solver() {
         let config = BaselineConfig {
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             num_agents: 5,
             solver_name: "token_passing".into(),
             scheduler_name: "random".into(),
@@ -677,7 +677,7 @@ mod tests {
     #[test]
     fn headless_config_hash_deterministic() {
         let c1 = BaselineConfig {
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             num_agents: 10,
             solver_name: "pibt".into(),
             scheduler_name: "random".into(),
@@ -694,7 +694,7 @@ mod tests {
     #[test]
     fn headless_config_hash_differs_on_change() {
         let c1 = BaselineConfig {
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             num_agents: 10,
             solver_name: "pibt".into(),
             scheduler_name: "random".into(),
@@ -712,7 +712,7 @@ mod tests {
     #[test]
     fn baseline_record_accessor_methods() {
         let config = BaselineConfig {
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             num_agents: 5,
             solver_name: "pibt".into(),
             scheduler_name: "random".into(),
@@ -736,7 +736,7 @@ mod tests {
     #[test]
     fn headless_traffic_counts_populated() {
         let config = BaselineConfig {
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             num_agents: 8,
             solver_name: "pibt".into(),
             scheduler_name: "random".into(),
@@ -757,7 +757,7 @@ mod tests {
         use crate::core::runner::SimulationRunner;
 
         let config = BaselineConfig {
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             num_agents: 12,
             solver_name: "pibt".into(),
             scheduler_name: "random".into(),
@@ -816,7 +816,7 @@ mod tests {
     #[test]
     fn headless_parity_closest_scheduler() {
         let config = BaselineConfig {
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             num_agents: 20,
             solver_name: "pibt".into(),
             scheduler_name: "closest".into(),
@@ -838,7 +838,7 @@ mod tests {
         use crate::core::runner::SimulationRunner;
 
         let config = BaselineConfig {
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             num_agents: 15,
             solver_name: "pibt".into(),
             scheduler_name: "random".into(),
@@ -895,7 +895,7 @@ mod tests {
     #[test]
     fn headless_avg_throughput_reasonable() {
         let config = BaselineConfig {
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             num_agents: 8,
             solver_name: "pibt".into(),
             scheduler_name: "random".into(),
@@ -918,7 +918,7 @@ mod tests {
         use crate::core::runner::SimulationRunner;
 
         let config = BaselineConfig {
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             num_agents: 15,
             solver_name: "pibt".into(),
             scheduler_name: "random".into(),
@@ -998,7 +998,7 @@ mod tests {
     #[test]
     fn headless_throughput_is_instantaneous_count() {
         let config = BaselineConfig {
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             num_agents: 8,
             solver_name: "pibt".into(),
             scheduler_name: "random".into(),

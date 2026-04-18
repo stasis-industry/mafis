@@ -50,7 +50,7 @@
 //!    exhaustion, the function tracks `(goal_id DESC, heuristic ASC, time ASC)`
 //!    and returns the path to the "closest-to-next-goal" node it popped. This
 //!    is what unlocks RHCR-PBS from ~0.020 to ~0.45 tasks/tick on
-//!    warehouse_large — without it, `plan_agent` fails for any agent whose
+//!    warehouse_single_dock — without it, `plan_agent` fails for any agent whose
 //!    primary goal is farther than `horizon` and PBS falls back to single-step
 //!    PIBT. See `src/solver/shared/astar.rs` and the PAAMS 2026 sprint report.
 //!
@@ -69,7 +69,7 @@
 //! (3) no `nogood` set, (4) `conflicts ASC` tie-break instead of `g_val ASC`,
 //! (5) single-goal A* without goal sequences. The combination of (1) and (5)
 //! caused `plan_agent` to fail for any agent whose pickup-delivery distance
-//! exceeded `horizon = 15`, so PBS exhausted after 2 nodes on warehouse_large
+//! exceeded `horizon = 15`, so PBS exhausted after 2 nodes on warehouse_single_dock
 //! and the wrapper fell back to per-agent PIBT — pinning RHCR-PBS throughput
 //! to ~0.020 tasks/tick, 32-40× below the published reference. All five
 //! deviations are now closed; see the PAAMS 2026 writing for the historical
@@ -591,7 +591,7 @@ fn plan_agent(
     // reachable goal in the sequence.
     // Per-call expansion budget for PBS's sequential A*. This is tighter than
     // the global `ASTAR_MAX_EXPANSIONS` (5000) because `plan_agent` is invoked
-    // O(n × nodes) times per PBS window — on warehouse_large/N=40 that's ~500+
+    // O(n × nodes) times per PBS window — on warehouse_single_dock/N=40 that's ~500+
     // calls per window, so a 5000-budget balloons to ~2.5M expansions/window.
     // 2000 keeps total ~1M which the best-partial fallback still handles well.
     const PBS_ASTAR_BUDGET: u64 = 2_000;
@@ -1350,7 +1350,7 @@ impl WindowedPlanner for PbsPlanner {
         //   - `ctx.agents`, `ctx.grid`, `ctx.horizon` — immutable borrows.
         // Per-worker mutable state:
         //   - Each rayon worker allocates its own `SeqGoalGrid` (~3-7 MB at
-        //     warehouse_large dims, amortized across the ~N/num_threads calls
+        //     warehouse_single_dock dims, amortized across the ~N/num_threads calls
         //     each worker handles).
         //
         // WASM is single-threaded and cannot run rayon, so the whole `rhcr`

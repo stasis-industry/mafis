@@ -51,8 +51,8 @@ const SOLVERS: &[&str] = &["pibt", "rhcr_pbs", "token_passing"];
 
 const TOPOLOGIES: &[(&str, usize)] = &[
     ("warehouse_medium", 15),
-    ("warehouse_large", 20),
-    ("kiva_warehouse", 30),
+    ("warehouse_single_dock", 20),
+    ("warehouse_dual_dock", 30),
     ("sorting_center", 15),
     ("compact_grid", 15),
     ("fullfilment_center", 20),
@@ -63,7 +63,7 @@ fn all_solvers_on_all_topologies() {
     let mut failures = Vec::new();
 
     // Known limitations: PBS hits node limit on open maps with chokepoints.
-    let known_zero = [("rhcr_pbs", "sorting_center"), ("rhcr_pbs", "warehouse_large")];
+    let known_zero = [("rhcr_pbs", "sorting_center"), ("rhcr_pbs", "warehouse_single_dock")];
 
     for &solver in SOLVERS {
         for &(topology, agents) in TOPOLOGIES {
@@ -103,7 +103,7 @@ fn all_solvers_on_all_topologies() {
 #[test]
 fn both_schedulers_produce_throughput() {
     for &sched in &["random", "closest"] {
-        let r = run("pibt", "warehouse_large", sched, 20, None, 42);
+        let r = run("pibt", "warehouse_single_dock", sched, 20, None, 42);
         assert!(r.baseline_metrics.total_tasks > 0, "{sched} scheduler produced 0 tasks");
         assert!(r.baseline_metrics.avg_throughput > 0.0, "{sched} scheduler has zero throughput");
         eprintln!(
@@ -126,7 +126,7 @@ fn burst_failure_kills_agents() {
         burst_at_tick: 50,
         ..Default::default()
     };
-    let r = run("pibt", "warehouse_large", "random", 20, Some(scenario), 42);
+    let r = run("pibt", "warehouse_single_dock", "random", 20, Some(scenario), 42);
 
     // Both runs should produce tasks
     assert!(r.baseline_metrics.total_tasks > 0, "baseline should produce tasks");
@@ -158,7 +158,7 @@ fn wear_based_kills_agents_over_time() {
     // Use closest scheduler + few agents to ensure enough movement for
     // operational_age to reach Weibull failure ticks. Dense fleets congest
     // and accumulate very little operational_age.
-    let r = run("pibt", "warehouse_large", "closest", 5, Some(scenario), 42);
+    let r = run("pibt", "warehouse_single_dock", "closest", 5, Some(scenario), 42);
 
     // Wear should kill agents progressively
     assert!(
@@ -184,7 +184,7 @@ fn zone_outage_injects_latency() {
         zone_latency_duration: 30,
         ..Default::default()
     };
-    let r = run("pibt", "warehouse_large", "random", 20, Some(scenario), 42);
+    let r = run("pibt", "warehouse_single_dock", "random", 20, Some(scenario), 42);
 
     // Zone outage should cause throughput dip but agents survive
     assert!(
@@ -211,7 +211,7 @@ fn intermittent_faults_reduce_throughput() {
         intermittent_recovery_ticks: 10,
         ..Default::default()
     };
-    let r = run("pibt", "warehouse_large", "random", 20, Some(scenario), 42);
+    let r = run("pibt", "warehouse_single_dock", "random", 20, Some(scenario), 42);
 
     // Intermittent faults should not kill agents
     assert!(
@@ -245,7 +245,7 @@ fn metrics_in_valid_ranges() {
         burst_at_tick: 50,
         ..Default::default()
     };
-    let r = run("pibt", "warehouse_large", "random", 20, Some(scenario), 42);
+    let r = run("pibt", "warehouse_single_dock", "random", 20, Some(scenario), 42);
     let m = &r.faulted_metrics;
 
     // FT should be >= 0 (can exceed 1.0 for Braess's paradox — killing agents
@@ -295,8 +295,8 @@ fn deterministic_replay() {
         ..Default::default()
     };
 
-    let r1 = run("pibt", "warehouse_large", "random", 20, Some(scenario.clone()), 42);
-    let r2 = run("pibt", "warehouse_large", "random", 20, Some(scenario), 42);
+    let r1 = run("pibt", "warehouse_single_dock", "random", 20, Some(scenario.clone()), 42);
+    let r2 = run("pibt", "warehouse_single_dock", "random", 20, Some(scenario), 42);
 
     assert_eq!(
         r1.baseline_metrics.total_tasks, r2.baseline_metrics.total_tasks,
@@ -331,8 +331,8 @@ fn deterministic_replay() {
 #[test]
 fn deterministic_across_solvers() {
     for &solver in &["rhcr_pbs", "token_passing"] {
-        let r1 = run(solver, "warehouse_large", "random", 8, None, 42);
-        let r2 = run(solver, "warehouse_large", "random", 8, None, 42);
+        let r1 = run(solver, "warehouse_single_dock", "random", 8, None, 42);
+        let r2 = run(solver, "warehouse_single_dock", "random", 8, None, 42);
         assert_eq!(
             r1.baseline_metrics.total_tasks, r2.baseline_metrics.total_tasks,
             "{solver}: baseline tasks differ between identical runs"
@@ -356,7 +356,7 @@ fn new_topologies_under_fault() {
     };
 
     for &(topology, agents) in
-        &[("kiva_warehouse", 30), ("sorting_center", 15), ("compact_grid", 15)]
+        &[("warehouse_dual_dock", 30), ("sorting_center", 15), ("compact_grid", 15)]
     {
         let r = run("pibt", topology, "random", agents, Some(scenario.clone()), 42);
         assert!(r.baseline_metrics.total_tasks > 0, "{topology}: baseline produced no tasks");
@@ -380,7 +380,7 @@ fn all_solvers_no_collisions_500_ticks() {
     let solvers = ["pibt", "rhcr_pbs", "token_passing"];
 
     for solver_name in &solvers {
-        let topo = ActiveTopology::from_name("warehouse_large");
+        let topo = ActiveTopology::from_name("warehouse_single_dock");
         let output = topo.topology().generate(42);
         let grid_area = (output.grid.width * output.grid.height) as usize;
         let mut rng = SeededRng::new(42);
@@ -517,7 +517,7 @@ fn token_passing_no_edge_swaps() {
 
 #[test]
 fn rhcr_fallback_collision_free() {
-    let topo = ActiveTopology::from_name("warehouse_large");
+    let topo = ActiveTopology::from_name("warehouse_single_dock");
     let output = topo.topology().generate(42);
     let grid_area = (output.grid.width * output.grid.height) as usize;
     let mut rng = SeededRng::new(42);
@@ -589,8 +589,8 @@ fn determinism_all_solvers_all_schedulers() {
 
     for solver in &solvers {
         for sched in &schedulers {
-            let r1 = run(solver, "warehouse_large", sched, 20, None, 42);
-            let r2 = run(solver, "warehouse_large", sched, 20, None, 42);
+            let r1 = run(solver, "warehouse_single_dock", sched, 20, None, 42);
+            let r2 = run(solver, "warehouse_single_dock", sched, 20, None, 42);
 
             assert_eq!(
                 r1.baseline_metrics.total_tasks, r2.baseline_metrics.total_tasks,
@@ -619,7 +619,7 @@ fn determinism_all_solvers_all_schedulers() {
 
 #[test]
 fn baseline_faulted_parity_before_burst() {
-    let topo = ActiveTopology::from_name("warehouse_large");
+    let topo = ActiveTopology::from_name("warehouse_single_dock");
     let output = topo.topology().generate(42);
     let grid_area = (output.grid.width * output.grid.height) as usize;
     let mut rng = SeededRng::new(42);
@@ -675,7 +675,7 @@ fn baseline_faulted_parity_before_burst() {
 
 #[test]
 fn baseline_faulted_parity_before_wear() {
-    let topo = ActiveTopology::from_name("warehouse_large");
+    let topo = ActiveTopology::from_name("warehouse_single_dock");
     let output = topo.topology().generate(42);
     let grid_area = (output.grid.width * output.grid.height) as usize;
     let mut rng = SeededRng::new(42);
@@ -753,7 +753,7 @@ fn baseline_faulted_parity_before_wear() {
 
 #[test]
 fn baseline_faulted_parity_before_intermittent() {
-    let topo = ActiveTopology::from_name("warehouse_large");
+    let topo = ActiveTopology::from_name("warehouse_single_dock");
     let output = topo.topology().generate(42);
     let grid_area = (output.grid.width * output.grid.height) as usize;
     let mut rng = SeededRng::new(42);
@@ -827,7 +827,7 @@ fn all_schedulers_nonzero_throughput() {
     for sched in &["random", "closest"] {
         let config = ExperimentConfig {
             solver_name: "pibt".into(),
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             scenario: None,
             scheduler_name: sched.to_string(),
             num_agents: 20,
@@ -848,7 +848,7 @@ fn all_schedulers_nonzero_throughput() {
 #[test]
 fn ft_pipeline_end_to_end() {
     // No faults -> FT should be 1.0
-    let r_clean = run("pibt", "warehouse_large", "random", 30, None, 42);
+    let r_clean = run("pibt", "warehouse_single_dock", "random", 30, None, 42);
     assert!(
         (r_clean.faulted_metrics.fault_tolerance - 1.0).abs() < 1e-10,
         "FT should be 1.0 with no faults, got {}",
@@ -867,7 +867,7 @@ fn ft_pipeline_end_to_end() {
         burst_at_tick: 50,
         ..Default::default()
     };
-    let r_fault = run("pibt", "warehouse_large", "random", 30, Some(scenario), 42);
+    let r_fault = run("pibt", "warehouse_single_dock", "random", 30, Some(scenario), 42);
     assert!(
         r_fault.faulted_metrics.fault_tolerance > 0.0,
         "FT should be > 0 (agents still complete tasks), got ft={}, faulted_tasks={}, baseline_tasks={}",
@@ -902,7 +902,7 @@ fn burst_kills_exact_count() {
         burst_at_tick: 50,
         ..Default::default()
     };
-    let r = run("pibt", "warehouse_large", "random", 50, Some(scenario), 42);
+    let r = run("pibt", "warehouse_single_dock", "random", 50, Some(scenario), 42);
 
     // 20% of 50 = 10 agents should die
     // survival_rate = (50 - 10) / 50 = 0.80
@@ -930,11 +930,11 @@ fn wear_rate_ordering_invariant() {
             ..Default::default()
         };
         // Use closest scheduler + fewer agents for more movement per agent
-        // (faster operational_age accumulation). warehouse_large has queue
+        // (faster operational_age accumulation). warehouse_single_dock has queue
         // infrastructure that keeps agents moving consistently.
         let config = ExperimentConfig {
             solver_name: "pibt".into(),
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             scenario: Some(scenario),
             scheduler_name: "closest".into(),
             num_agents: 10,
@@ -997,7 +997,7 @@ fn delete_fault_determinism() {
     let total_ticks: u64 = 300;
     let fault_tick: u64 = 100;
     let solver_name = "pibt";
-    let topo_name = "warehouse_large";
+    let topo_name = "warehouse_single_dock";
     let num_agents = 20;
 
     // ── Setup shared state ──────────────────────────────────────────
@@ -1223,7 +1223,7 @@ fn delete_fault_double_restore_determinism() {
     let total_ticks: u64 = 500;
     let fault_tick: u64 = 100;
     let solver_name = "pibt";
-    let topo_name = "warehouse_large";
+    let topo_name = "warehouse_single_dock";
     let num_agents = 20;
 
     let topo = ActiveTopology::from_name(topo_name);
@@ -1384,7 +1384,7 @@ fn delete_fault_inplace_restore_determinism() {
     let total_ticks: u64 = 500;
     let fault_tick: u64 = 100;
     let solver_name = "pibt";
-    let topo_name = "warehouse_large";
+    let topo_name = "warehouse_single_dock";
     let num_agents = 20;
 
     let topo = ActiveTopology::from_name(topo_name);
@@ -1682,20 +1682,15 @@ fn restore_runner_from_snapshot(
 //     and PIBT stays competitive with Token Passing at moderate density.
 // ═══════════════════════════════════════════════════════════════════════
 
-/// Sanity check (not a benchmark): verify that all 8 solvers produce positive
-/// throughput on warehouse_large, and that no single solver collapses to below
-/// 5% of the best-performing solver. This catches catastrophic regressions
-/// (e.g., a solver always returning Wait actions) without being fragile to
-/// normal performance variation between paradigms.
+/// Sanity check (not a benchmark): verify that the 3 active solvers produce
+/// positive throughput on warehouse_single_dock, and that no single solver
+/// collapses to below 5% of the best-performing solver. Catches catastrophic
+/// regressions (e.g., a solver always returning Wait actions) without being
+/// fragile to normal performance variation between paradigms.
 ///
-/// On warehouse_large with 20 agents, empirical ordering (200 ticks, seed=42):
-/// Token Passing > RHCR-Priority-A\* ≈ TPTS > PIBT > RHCR-PBS > RHCR-PIBT > RT-LaCAM.
-/// This ordering is topology- and density-dependent and should not be asserted
-/// as a fixed invariant; the 5%-of-best floor is the meaningful regression guard.
-///
-/// Note: RHCR-PBS is listed as `known_zero` for `sorting_center` in
-/// `all_solvers_on_all_topologies`. On `warehouse_large` it uses PIBT fallback
-/// and produces nonzero throughput.
+/// Active solvers: PIBT, RHCR-PBS, Token Passing. Ordering is topology- and
+/// density-dependent and should not be asserted as a fixed invariant; the
+/// 5%-of-best floor is the meaningful regression guard.
 #[test]
 fn solver_throughput_ordering_sanity() {
     // Run 200 ticks (shorter than TICK_COUNT=500 to keep CI fast).
@@ -1708,7 +1703,7 @@ fn solver_throughput_ordering_sanity() {
     for &solver in &all_solvers {
         let config = ExperimentConfig {
             solver_name: solver.into(),
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             scenario: None,
             scheduler_name: "random".into(),
             num_agents: 20,
@@ -1726,7 +1721,7 @@ fn solver_throughput_ordering_sanity() {
         );
     }
 
-    // All solvers must produce positive throughput on warehouse_large.
+    // All solvers must produce positive throughput on warehouse_single_dock.
     // Exception: rhcr_pbs hits its node limit on larger maps and falls back to
     // per-agent PIBT which can produce zero tasks at low density.
     for &solver in &all_solvers {
@@ -1737,7 +1732,7 @@ fn solver_throughput_ordering_sanity() {
         assert!(
             tp > 0.0,
             "solver_throughput_ordering_sanity: {solver} produced zero throughput on \
-             warehouse_large with 20 agents / 200 ticks"
+             warehouse_single_dock with 20 agents / 200 ticks"
         );
     }
 
@@ -1774,7 +1769,7 @@ fn solver_throughput_ordering_sanity() {
 fn rewind_determinism_reset_matches_fresh() {
     let solvers_with_state = ["pibt", "rhcr_pbs", "token_passing"];
 
-    let topo = ActiveTopology::from_name("warehouse_large");
+    let topo = ActiveTopology::from_name("warehouse_single_dock");
     let output = topo.topology().generate(42);
     let grid_area = (output.grid.width * output.grid.height) as usize;
 
@@ -1887,7 +1882,7 @@ fn intermittent_respects_start_tick() {
     let recovery: u32 = 5;
     let total_ticks: u64 = start_tick + 3 * mtbf; // enough window to see faults
 
-    let topo = ActiveTopology::from_name("warehouse_large");
+    let topo = ActiveTopology::from_name("warehouse_single_dock");
     let output = topo.topology().generate(42);
     let grid_area = (output.grid.width * output.grid.height) as usize;
     let mut rng = SeededRng::new(42);
@@ -1952,7 +1947,7 @@ fn intermittent_first_fire_median() {
     let num_seeds: u64 = 120;
     let max_ticks = 800u64; // generous window: P(no fire by 800t) = e^{-8} ≈ 0.03%
 
-    let topo = ActiveTopology::from_name("warehouse_large");
+    let topo = ActiveTopology::from_name("warehouse_single_dock");
     let output = topo.topology().generate(7);
     let grid_area = (output.grid.width * output.grid.height) as usize;
 
@@ -2030,7 +2025,7 @@ fn intermittent_rewind_determinism() {
     let rewind_tick: u64 = 150;
     let mtbf: u64 = 50;
 
-    let topo = ActiveTopology::from_name("warehouse_large");
+    let topo = ActiveTopology::from_name("warehouse_single_dock");
     let output = topo.topology().generate(99);
     let grid_area = (output.grid.width * output.grid.height) as usize;
 
