@@ -355,9 +355,13 @@ fn new_topologies_under_fault() {
         ..Default::default()
     };
 
-    for &(topology, agents) in
-        &[("warehouse_dual_dock", 30), ("sorting_center", 15), ("compact_grid", 15)]
-    {
+    for &(topology, agents) in &[
+        ("warehouse_dual_dock", 30),
+        ("sorting_center", 15),
+        ("compact_grid", 15),
+        ("warehouse_sd_w2", 30),
+        ("warehouse_sd_w3", 30),
+    ] {
         let r = run("pibt", topology, "random", agents, Some(scenario.clone()), 42);
         assert!(r.baseline_metrics.total_tasks > 0, "{topology}: baseline produced no tasks");
         assert!(r.faulted_metrics.survival_rate < 1.0, "{topology}: burst should kill agents");

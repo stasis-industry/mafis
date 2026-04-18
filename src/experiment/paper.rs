@@ -384,6 +384,128 @@ pub fn paams_experiments() -> Vec<(&'static str, ExperimentMatrix)> {
 }
 
 // ---------------------------------------------------------------------------
+// Aisle-width sweep (PAAMS 2026 — structural cascade claim)
+// ---------------------------------------------------------------------------
+//
+// Three single-dock variants that differ ONLY in inter-rack aisle width:
+//   SD-w1 (57×33, aisle=1): existing warehouse_single_dock, fleet {20, 40, 60}
+//   SD-w2 (57×44, aisle=2): warehouse_sd_w2,               fleet {36, 72, 108}
+//   SD-w3 (57×55, aisle=3): warehouse_sd_w3,               fleet {50, 100, 151}
+//
+// Rack count (800 cells), pickup density, and fleet-density (agents /
+// walkable-cell) are held constant across the three maps; only aisle width —
+// and therefore structural bypass capacity — varies. Delivery-cell count
+// scales with walkable area (one station per ~77 walkable cells) so no
+// solver gets a dock-queue advantage from map size.
+//
+// Token Passing envelope: TP operates reliably at ≤100 agents (per-agent A*
+// budget at `ASTAR_MAX_EXPANSIONS = 5000` exhausts above that threshold and
+// many agents default to Wait). We split each topology into two matrices:
+//
+//   *_in_env  → all three solvers,   densities within TP's envelope
+//   *_out_env → PIBT + RHCR-PBS only, density above TP's envelope
+//
+// SD-w1 is entirely in-envelope so it only produces one matrix. The
+// out-envelope cells (SD-w2 n=108, SD-w3 n=151) still belong to the sweep —
+// they feed the secondary "decentralized paradigm exits the envelope before
+// centralized" finding without contaminating the primary topology-sensitivity
+// claim.
+
+/// **RQ-Aisle: Does inter-rack aisle width modulate fault tolerance at
+/// fixed density, and does this effect differ by solver paradigm?**
+///
+/// Independent variable: aisle width (1 / 2 / 3 cells)
+/// Controlled: rack count, pickup density, agent density, scheduler (closest)
+///
+/// Token Passing restricted to ≤100 agents (its design envelope). Out-of-
+/// envelope densities (SD-w2 n=108, SD-w3 n=151) are run only with PIBT and
+/// RHCR-PBS so the primary aisle-width claim rests on in-envelope,
+/// solver-comparable cells while the paradigm-limit finding keeps its own
+/// data.
+///
+/// Total runs (6 scenarios × 30 seeds baseline-paired):
+///   SD-w1           3 solvers × 3 counts × 6 × 30 = 1620
+///   SD-w2 in-env    3 solvers × 2 counts × 6 × 30 = 1080
+///   SD-w2 out-env   2 solvers × 1 count  × 6 × 30 =  360
+///   SD-w3 in-env    3 solvers × 2 counts × 6 × 30 = 1080
+///   SD-w3 out-env   2 solvers × 1 count  × 6 × 30 =  360
+///   ────────────────────────────────────────────────────
+///                                                   4500
+pub fn paams_aisle_width() -> Vec<(&'static str, ExperimentMatrix)> {
+    let solvers_all = paams_solvers();
+    let solvers_scalable: Vec<String> = vec!["pibt".into(), "rhcr_pbs".into()];
+    let scenarios = paper_scenarios();
+
+    vec![
+        // SD-w1 (aisle width 1) — fully in-envelope
+        (
+            "aisle_width_w1",
+            ExperimentMatrix {
+                solvers: solvers_all.clone(),
+                topologies: vec!["warehouse_single_dock".into()],
+                scenarios: scenarios.clone(),
+                schedulers: vec!["closest".into()],
+                agent_counts: vec![20, 40, 60],
+                seeds: SEEDS.to_vec(),
+                tick_count: TICK_COUNT,
+            },
+        ),
+        // SD-w2 (aisle width 2) in-envelope
+        (
+            "aisle_width_w2_in_env",
+            ExperimentMatrix {
+                solvers: solvers_all.clone(),
+                topologies: vec!["warehouse_sd_w2".into()],
+                scenarios: scenarios.clone(),
+                schedulers: vec!["closest".into()],
+                agent_counts: vec![36, 72],
+                seeds: SEEDS.to_vec(),
+                tick_count: TICK_COUNT,
+            },
+        ),
+        // SD-w2 out-envelope — PIBT + RHCR-PBS only
+        (
+            "aisle_width_w2_out_env",
+            ExperimentMatrix {
+                solvers: solvers_scalable.clone(),
+                topologies: vec!["warehouse_sd_w2".into()],
+                scenarios: scenarios.clone(),
+                schedulers: vec!["closest".into()],
+                agent_counts: vec![108],
+                seeds: SEEDS.to_vec(),
+                tick_count: TICK_COUNT,
+            },
+        ),
+        // SD-w3 (aisle width 3) in-envelope
+        (
+            "aisle_width_w3_in_env",
+            ExperimentMatrix {
+                solvers: solvers_all,
+                topologies: vec!["warehouse_sd_w3".into()],
+                scenarios: scenarios.clone(),
+                schedulers: vec!["closest".into()],
+                agent_counts: vec![50, 100],
+                seeds: SEEDS.to_vec(),
+                tick_count: TICK_COUNT,
+            },
+        ),
+        // SD-w3 out-envelope — PIBT + RHCR-PBS only
+        (
+            "aisle_width_w3_out_env",
+            ExperimentMatrix {
+                solvers: solvers_scalable,
+                topologies: vec!["warehouse_sd_w3".into()],
+                scenarios,
+                schedulers: vec!["closest".into()],
+                agent_counts: vec![151],
+                seeds: SEEDS.to_vec(),
+                tick_count: TICK_COUNT,
+            },
+        ),
+    ]
+}
+
+// ---------------------------------------------------------------------------
 // Quick smoke test matrix (for CI / development)
 // ---------------------------------------------------------------------------
 
@@ -462,6 +584,35 @@ mod tests {
         // E1: 3 solvers × 6 scenarios × 3 counts × 30 seeds × 2 topos = 3,240
         // E2: 3 solvers × 6 scenarios × 2 schedulers × 30 seeds = 1,080
         assert_eq!(total, 4320);
+    }
+
+    #[test]
+    fn paams_aisle_width_counts() {
+        let experiments = paams_aisle_width();
+        assert_eq!(experiments.len(), 5);
+        let total: usize = experiments.iter().map(|(_, m)| m.total_runs()).sum();
+        //   SD-w1:          3 × 3 × 6 × 30 = 1620
+        //   SD-w2 in-env:   3 × 2 × 6 × 30 = 1080
+        //   SD-w2 out-env:  2 × 1 × 6 × 30 =  360
+        //   SD-w3 in-env:   3 × 2 × 6 × 30 = 1080
+        //   SD-w3 out-env:  2 × 1 × 6 × 30 =  360
+        //   Total                           = 4500
+        assert_eq!(total, 4500);
+    }
+
+    #[test]
+    fn paams_aisle_width_tp_only_in_envelope() {
+        // Token Passing must appear only in cells with num_agents ≤ 100.
+        for (name, m) in paams_aisle_width() {
+            let has_tp = m.solvers.iter().any(|s| s == "token_passing");
+            let max_n = *m.agent_counts.iter().max().unwrap();
+            if has_tp {
+                assert!(
+                    max_n <= 100,
+                    "token_passing out of envelope in matrix {name} (max n={max_n})"
+                );
+            }
+        }
     }
 
     #[test]
