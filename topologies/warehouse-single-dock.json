@@ -1,5 +1,5 @@
 {
-  "name": "Warehouse Large",
+  "name": "Warehouse (Single Dock)",
   "width": 57,
   "height": 33,
   "seed": 42,
@@ -712,12 +712,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 2,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 2,
       "type": "wall"
@@ -928,12 +922,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 3,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 3,
       "type": "wall"
@@ -1360,12 +1348,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 5,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 5,
       "type": "wall"
@@ -1576,12 +1558,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 6,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 6,
       "type": "wall"
@@ -2008,12 +1984,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 8,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 8,
       "type": "wall"
@@ -2224,12 +2194,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 9,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 9,
       "type": "wall"
@@ -2656,12 +2620,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 11,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 11,
       "type": "wall"
@@ -2872,12 +2830,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 12,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 12,
       "type": "wall"
@@ -3304,12 +3256,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 14,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 14,
       "type": "wall"
@@ -3520,12 +3466,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 15,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 15,
       "type": "wall"
@@ -3952,12 +3892,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 17,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 17,
       "type": "wall"
@@ -4168,12 +4102,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 18,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 18,
       "type": "wall"
@@ -4600,12 +4528,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 20,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 20,
       "type": "wall"
@@ -4816,12 +4738,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 21,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 21,
       "type": "wall"
@@ -5248,12 +5164,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 23,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 23,
       "type": "wall"
@@ -5464,12 +5374,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 24,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 24,
       "type": "wall"
@@ -5896,12 +5800,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 26,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 26,
       "type": "wall"
@@ -6112,12 +6010,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 27,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 27,
       "type": "wall"
@@ -6544,12 +6436,6 @@
       "type": "wall"
     },
     {
-      "x": 55,
-      "y": 29,
-      "type": "delivery",
-      "queue_direction": "west"
-    },
-    {
       "x": 56,
       "y": 29,
       "type": "wall"
@@ -6758,12 +6644,6 @@
       "x": 50,
       "y": 30,
       "type": "wall"
-    },
-    {
-      "x": 55,
-      "y": 30,
-      "type": "delivery",
-      "queue_direction": "west"
     },
     {
       "x": 56,
