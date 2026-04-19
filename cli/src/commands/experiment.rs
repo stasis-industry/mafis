@@ -36,13 +36,13 @@ const EXPERIMENTS: &[ExperimentInfo] = &[
     ExperimentInfo {
         name: "topology_medium",
         runs: 180,
-        description: "warehouse_large, 40 agents, 6 scenarios \u{00d7} 30 seeds",
+        description: "warehouse_single_dock, 40 agents, 6 scenarios \u{00d7} 30 seeds",
         test_fn: "topology_medium",
     },
     ExperimentInfo {
         name: "topology_large",
         runs: 180,
-        description: "kiva_warehouse, 80 agents, 6 scenarios \u{00d7} 30 seeds",
+        description: "warehouse_dual_dock, 80 agents, 6 scenarios \u{00d7} 30 seeds",
         test_fn: "topology_large",
     },
     ExperimentInfo {
@@ -54,7 +54,7 @@ const EXPERIMENTS: &[ExperimentInfo] = &[
     ExperimentInfo {
         name: "paams_full",
         runs: 7920,
-        description: "PAAMS 2026: 4 solvers \u{00d7} 3 topologies \u{00d7} 6 scenarios \u{00d7} 30 seeds",
+        description: "Full suite: 3 solvers \u{00d7} 2 topologies \u{00d7} 6 scenarios \u{00d7} 30 seeds",
         test_fn: "paams_full",
     },
 ];
@@ -162,7 +162,7 @@ pub fn run_all(root: &Path) -> anyhow::Result<()> {
     )?;
 
     if !status.success() {
-        anyhow::bail!("full paper matrix failed");
+        anyhow::bail!("full experiment matrix failed");
     }
 
     style::print_success("All experiments complete. Results in results/");

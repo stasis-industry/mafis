@@ -50,7 +50,7 @@ const SEEDS: &[u64] = &[42, 123, 456, 789, 1024];
 
 #[test]
 fn property_throughput_saturation_pibt() {
-    let topology = "warehouse_large"; // 32×21 = 672 cells
+    let topology = "warehouse_single_dock"; // 32×21 = 672 cells
     let ticks = 300;
 
     // Sweep: 5, 10, 20, 40, 60, 80 agents
@@ -94,7 +94,8 @@ fn property_throughput_saturation_pibt() {
 #[test]
 fn property_pibt_completeness() {
     // Run on all topologies at moderate density
-    let topologies = ["warehouse_large", "kiva_warehouse", "sorting_center", "compact_grid"];
+    let topologies =
+        ["warehouse_single_dock", "warehouse_dual_dock", "sorting_center", "compact_grid"];
     let ticks = 500;
     let agents = 20;
 
@@ -160,7 +161,7 @@ fn property_pibt_liveness_at_high_density() {
 
 #[test]
 fn property_solver_paradigm_consistency() {
-    let topology = "warehouse_large";
+    let topology = "warehouse_single_dock";
     let ticks = 300;
     let agents = 20;
 
@@ -204,7 +205,7 @@ fn property_topology_sensitivity() {
     let ticks = 300;
     let agents = 20;
 
-    let topologies = ["warehouse_large", "compact_grid", "sorting_center"];
+    let topologies = ["warehouse_single_dock", "compact_grid", "sorting_center"];
     let mut throughputs = Vec::new();
 
     for &topo in &topologies {

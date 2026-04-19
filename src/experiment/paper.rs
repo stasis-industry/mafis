@@ -104,7 +104,7 @@ fn intermittent() -> FaultScenario {
     }
 }
 
-/// All fault scenarios used in the paper (6 total: 2 categories).
+/// All fault scenarios (6 total, 2 categories).
 ///
 /// Category 1 — Recoverable: ZoneOutage (spatial strip, 50t), IntermittentFault
 /// Category 2 — Permanent-distributed: BurstFailure (20%/50%), WearBased (medium/high)
@@ -134,7 +134,7 @@ fn paper_scenarios() -> Vec<Option<FaultScenario>> {
 pub fn solver_resilience() -> ExperimentMatrix {
     ExperimentMatrix {
         solvers: vec!["pibt".into(), "rhcr_pbs".into(), "token_passing".into()],
-        topologies: vec!["warehouse_large".into()],
+        topologies: vec!["warehouse_single_dock".into()],
         scenarios: paper_scenarios(),
         schedulers: vec!["random".into()],
         agent_counts: vec![40],
@@ -164,7 +164,7 @@ pub fn topology_effect() -> Vec<ExperimentMatrix> {
     vec![
         ExperimentMatrix {
             solvers: vec!["pibt".into()],
-            topologies: vec!["warehouse_large".into()],
+            topologies: vec!["warehouse_single_dock".into()],
             scenarios: scenarios.clone(),
             schedulers: vec!["random".into()],
             agent_counts: vec![40],
@@ -173,7 +173,7 @@ pub fn topology_effect() -> Vec<ExperimentMatrix> {
         },
         ExperimentMatrix {
             solvers: vec!["pibt".into()],
-            topologies: vec!["kiva_warehouse".into()],
+            topologies: vec!["warehouse_dual_dock".into()],
             scenarios: scenarios.clone(),
             schedulers: vec!["random".into()],
             agent_counts: vec![80],
@@ -225,7 +225,7 @@ pub fn topology_effect() -> Vec<ExperimentMatrix> {
 pub fn scale_sensitivity() -> ExperimentMatrix {
     ExperimentMatrix {
         solvers: vec!["pibt".into()],
-        topologies: vec!["warehouse_large".into()],
+        topologies: vec!["warehouse_single_dock".into()],
         scenarios: paper_scenarios(),
         schedulers: vec!["random".into()],
         agent_counts: vec![10, 20, 40, 80],
@@ -249,7 +249,7 @@ pub fn scale_sensitivity() -> ExperimentMatrix {
 pub fn scheduler_effect() -> ExperimentMatrix {
     ExperimentMatrix {
         solvers: vec!["pibt".into()],
-        topologies: vec!["warehouse_large".into()],
+        topologies: vec!["warehouse_single_dock".into()],
         scenarios: paper_scenarios(),
         schedulers: vec!["random".into(), "closest".into()],
         agent_counts: vec![40],
@@ -259,7 +259,7 @@ pub fn scheduler_effect() -> ExperimentMatrix {
 }
 
 // ---------------------------------------------------------------------------
-// Full paper matrix (all experiments combined)
+// Full experiment matrix (all experiments combined)
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -279,7 +279,7 @@ pub fn scheduler_effect() -> ExperimentMatrix {
 pub fn braess_resilience() -> ExperimentMatrix {
     ExperimentMatrix {
         solvers: vec!["pibt".into(), "rhcr_pbs".into(), "token_passing".into()],
-        topologies: vec!["warehouse_large".into()],
+        topologies: vec!["warehouse_single_dock".into()],
         scenarios: paper_scenarios(),
         schedulers: vec!["random".into()],
         agent_counts: vec![10, 20, 40, 80],
@@ -288,7 +288,7 @@ pub fn braess_resilience() -> ExperimentMatrix {
     }
 }
 
-/// All experiment matrices for the paper.
+/// All experiment matrices (legacy presets).
 ///
 /// Total: 540 + 900 + 720 + 360 = 2520 runs
 /// At ~0.5s per run (500 ticks x 2 sims), ~20 minutes total.
@@ -304,8 +304,8 @@ pub fn all_paper_experiments() -> Vec<(&'static str, ExperimentMatrix)> {
         ("scheduler_effect", scheduler_effect()),
     ];
     let topo_names = [
-        "topology_warehouse_large",
-        "topology_kiva_warehouse",
+        "topology_warehouse_single_dock",
+        "topology_warehouse_dual_dock",
         "topology_sorting_center",
         "topology_compact_grid",
         "topology_fullfilment_center",
@@ -317,36 +317,36 @@ pub fn all_paper_experiments() -> Vec<(&'static str, ExperimentMatrix)> {
 }
 
 // ---------------------------------------------------------------------------
-// PAAMS 2026 — Demo Track + AREA Workshop
+// Main experiment suite — 3 solvers × 6 scenarios × 2 topologies
 // ---------------------------------------------------------------------------
 
-/// Solvers used in PAAMS experiments.
+/// Solvers used in the main experiment suite.
 ///
-/// Fidelity discipline: every solver in this list has a faithful Rust implementation
-/// traceable to public reference source code under `docs/papers_codes/`.
+/// Every solver has a faithful Rust implementation traceable to a
+/// public reference.
 fn paams_solvers() -> Vec<String> {
     vec!["pibt".into(), "rhcr_pbs".into(), "token_passing".into()]
 }
 
-/// PAAMS experiments: Solver × Fault × Scale × Topology + Scheduler effect.
+/// Main experiment suite: Solver × Fault × Scale × Topology + Scheduler effect.
 ///
-/// Design: per-topology matrices (agent counts vary per map capacity).
+/// Per-topology matrices with agent counts varying by map capacity.
 /// Three density levels per topology: low / default / high.
 ///
 /// E1: 3 solvers × 6 scenarios × 3 agent counts × 3 topologies × 30 seeds = 4,860 runs
 /// E2: 3 solvers × 6 scenarios × 2 schedulers × 1 topology × 30 seeds = 1,080 runs
-/// Total: 5,940 runs
+/// Total: 4,320 runs
 pub fn paams_experiments() -> Vec<(&'static str, ExperimentMatrix)> {
     let solvers = paams_solvers();
     let scenarios = paper_scenarios();
 
     vec![
-        // E1a: warehouse_large (57×33) — 20/40/60 agents
+        // E1a: warehouse_single_dock (57×33) — 20/40/60 agents
         (
-            "paams_warehouse_large",
+            "paams_warehouse_single_dock",
             ExperimentMatrix {
                 solvers: solvers.clone(),
-                topologies: vec!["warehouse_large".into()],
+                topologies: vec!["warehouse_single_dock".into()],
                 scenarios: scenarios.clone(),
                 schedulers: vec!["closest".into()],
                 agent_counts: vec![20, 40, 60],
@@ -354,12 +354,12 @@ pub fn paams_experiments() -> Vec<(&'static str, ExperimentMatrix)> {
                 tick_count: TICK_COUNT,
             },
         ),
-        // E1b: kiva_warehouse (48×48) — 40/80/120 agents
+        // E1b: warehouse_dual_dock (61×33) — 40/80/120 agents
         (
-            "paams_kiva_warehouse",
+            "paams_warehouse_dual_dock",
             ExperimentMatrix {
                 solvers: solvers.clone(),
-                topologies: vec!["kiva_warehouse".into()],
+                topologies: vec!["warehouse_dual_dock".into()],
                 scenarios: scenarios.clone(),
                 schedulers: vec!["closest".into()],
                 agent_counts: vec![40, 80, 120],
@@ -367,28 +367,137 @@ pub fn paams_experiments() -> Vec<(&'static str, ExperimentMatrix)> {
                 tick_count: TICK_COUNT,
             },
         ),
-        // E1c: compact_grid (26×26) — 12/25/40 agents
-        (
-            "paams_compact_grid",
-            ExperimentMatrix {
-                solvers: solvers.clone(),
-                topologies: vec!["compact_grid".into()],
-                scenarios: scenarios.clone(),
-                schedulers: vec!["closest".into()],
-                agent_counts: vec![12, 25, 40],
-                seeds: SEEDS.to_vec(),
-                tick_count: TICK_COUNT,
-            },
-        ),
-        // E2: Scheduler effect (warehouse_large, 40 agents)
+        // E2: Scheduler effect (warehouse_single_dock, 40 agents)
         (
             "paams_scheduler_effect",
             ExperimentMatrix {
                 solvers,
-                topologies: vec!["warehouse_large".into()],
+                topologies: vec!["warehouse_single_dock".into()],
                 scenarios,
                 schedulers: vec!["random".into(), "closest".into()],
                 agent_counts: vec![40],
+                seeds: SEEDS.to_vec(),
+                tick_count: TICK_COUNT,
+            },
+        ),
+    ]
+}
+
+// ---------------------------------------------------------------------------
+// Aisle-width sweep (PAAMS 2026 — structural cascade claim)
+// ---------------------------------------------------------------------------
+//
+// Three single-dock variants that differ ONLY in inter-rack aisle width:
+//   SD-w1 (57×33, aisle=1): existing warehouse_single_dock, fleet {20, 40, 60}
+//   SD-w2 (57×44, aisle=2): warehouse_sd_w2,               fleet {36, 72, 108}
+//   SD-w3 (57×55, aisle=3): warehouse_sd_w3,               fleet {50, 100, 151}
+//
+// Rack count (800 cells), pickup density, and fleet-density (agents /
+// walkable-cell) are held constant across the three maps; only aisle width —
+// and therefore structural bypass capacity — varies. Delivery-cell count
+// scales with walkable area (one station per ~77 walkable cells) so no
+// solver gets a dock-queue advantage from map size.
+//
+// Token Passing envelope: TP operates reliably at ≤100 agents (per-agent A*
+// budget at `ASTAR_MAX_EXPANSIONS = 5000` exhausts above that threshold and
+// many agents default to Wait). We split each topology into two matrices:
+//
+//   *_in_env  → all three solvers,   densities within TP's envelope
+//   *_out_env → PIBT + RHCR-PBS only, density above TP's envelope
+//
+// SD-w1 is entirely in-envelope so it only produces one matrix. The
+// out-envelope cells (SD-w2 n=108, SD-w3 n=151) still belong to the sweep —
+// they feed the secondary "decentralized paradigm exits the envelope before
+// centralized" finding without contaminating the primary topology-sensitivity
+// claim.
+
+/// **RQ-Aisle: Does inter-rack aisle width modulate fault tolerance at
+/// fixed density, and does this effect differ by solver paradigm?**
+///
+/// Independent variable: aisle width (1 / 2 / 3 cells)
+/// Controlled: rack count, pickup density, agent density, scheduler (closest)
+///
+/// Token Passing restricted to ≤100 agents (its design envelope). Out-of-
+/// envelope densities (SD-w2 n=108, SD-w3 n=151) are run only with PIBT and
+/// RHCR-PBS so the primary aisle-width claim rests on in-envelope,
+/// solver-comparable cells while the paradigm-limit finding keeps its own
+/// data.
+///
+/// Total runs (6 scenarios × 30 seeds baseline-paired):
+///   SD-w1           3 solvers × 3 counts × 6 × 30 = 1620
+///   SD-w2 in-env    3 solvers × 2 counts × 6 × 30 = 1080
+///   SD-w2 out-env   2 solvers × 1 count  × 6 × 30 =  360
+///   SD-w3 in-env    3 solvers × 2 counts × 6 × 30 = 1080
+///   SD-w3 out-env   2 solvers × 1 count  × 6 × 30 =  360
+///   ────────────────────────────────────────────────────
+///                                                   4500
+pub fn paams_aisle_width() -> Vec<(&'static str, ExperimentMatrix)> {
+    let solvers_all = paams_solvers();
+    let solvers_scalable: Vec<String> = vec!["pibt".into(), "rhcr_pbs".into()];
+    let scenarios = paper_scenarios();
+
+    vec![
+        // SD-w1 (aisle width 1) — fully in-envelope
+        (
+            "aisle_width_w1",
+            ExperimentMatrix {
+                solvers: solvers_all.clone(),
+                topologies: vec!["warehouse_single_dock".into()],
+                scenarios: scenarios.clone(),
+                schedulers: vec!["closest".into()],
+                agent_counts: vec![20, 40, 60],
+                seeds: SEEDS.to_vec(),
+                tick_count: TICK_COUNT,
+            },
+        ),
+        // SD-w2 (aisle width 2) in-envelope
+        (
+            "aisle_width_w2_in_env",
+            ExperimentMatrix {
+                solvers: solvers_all.clone(),
+                topologies: vec!["warehouse_sd_w2".into()],
+                scenarios: scenarios.clone(),
+                schedulers: vec!["closest".into()],
+                agent_counts: vec![36, 72],
+                seeds: SEEDS.to_vec(),
+                tick_count: TICK_COUNT,
+            },
+        ),
+        // SD-w2 out-envelope — PIBT + RHCR-PBS only
+        (
+            "aisle_width_w2_out_env",
+            ExperimentMatrix {
+                solvers: solvers_scalable.clone(),
+                topologies: vec!["warehouse_sd_w2".into()],
+                scenarios: scenarios.clone(),
+                schedulers: vec!["closest".into()],
+                agent_counts: vec![108],
+                seeds: SEEDS.to_vec(),
+                tick_count: TICK_COUNT,
+            },
+        ),
+        // SD-w3 (aisle width 3) in-envelope
+        (
+            "aisle_width_w3_in_env",
+            ExperimentMatrix {
+                solvers: solvers_all,
+                topologies: vec!["warehouse_sd_w3".into()],
+                scenarios: scenarios.clone(),
+                schedulers: vec!["closest".into()],
+                agent_counts: vec![50, 100],
+                seeds: SEEDS.to_vec(),
+                tick_count: TICK_COUNT,
+            },
+        ),
+        // SD-w3 out-envelope — PIBT + RHCR-PBS only
+        (
+            "aisle_width_w3_out_env",
+            ExperimentMatrix {
+                solvers: solvers_scalable,
+                topologies: vec!["warehouse_sd_w3".into()],
+                scenarios,
+                schedulers: vec!["closest".into()],
+                agent_counts: vec![151],
                 seeds: SEEDS.to_vec(),
                 tick_count: TICK_COUNT,
             },
@@ -405,7 +514,7 @@ pub fn paams_experiments() -> Vec<(&'static str, ExperimentMatrix)> {
 pub fn smoke_test() -> ExperimentMatrix {
     ExperimentMatrix {
         solvers: vec!["pibt".into()],
-        topologies: vec!["warehouse_large".into()],
+        topologies: vec!["warehouse_single_dock".into()],
         scenarios: vec![Some(burst_20())],
         schedulers: vec!["random".into()],
         agent_counts: vec![15],
@@ -418,12 +527,12 @@ pub fn smoke_test() -> ExperimentMatrix {
 // Tier 3: Solver benchmark — all faithful solvers, baseline throughput comparison
 // ---------------------------------------------------------------------------
 
-/// Benchmark all faithful solvers at 40 agents on warehouse_large, no faults.
+/// Benchmark all faithful solvers at 40 agents on warehouse_single_dock, no faults.
 /// 5 seeds for statistical confidence. 30 runs total (3 solvers × 2 scenarios × 5 seeds).
 pub fn solver_benchmark() -> ExperimentMatrix {
     ExperimentMatrix {
         solvers: vec!["pibt".into(), "rhcr_pbs".into(), "token_passing".into()],
-        topologies: vec!["warehouse_large".into()],
+        topologies: vec!["warehouse_single_dock".into()],
         scenarios: vec![None, Some(burst_20())],
         schedulers: vec!["random".into()],
         agent_counts: vec![40],
@@ -472,9 +581,38 @@ mod tests {
     fn paams_experiment_counts() {
         let experiments = paams_experiments();
         let total: usize = experiments.iter().map(|(_, m)| m.total_runs()).sum();
-        // E1: 3 solvers × 6 scenarios × 3 counts × 30 seeds × 3 topos = 4,860
+        // E1: 3 solvers × 6 scenarios × 3 counts × 30 seeds × 2 topos = 3,240
         // E2: 3 solvers × 6 scenarios × 2 schedulers × 30 seeds = 1,080
-        assert_eq!(total, 5940);
+        assert_eq!(total, 4320);
+    }
+
+    #[test]
+    fn paams_aisle_width_counts() {
+        let experiments = paams_aisle_width();
+        assert_eq!(experiments.len(), 5);
+        let total: usize = experiments.iter().map(|(_, m)| m.total_runs()).sum();
+        //   SD-w1:          3 × 3 × 6 × 30 = 1620
+        //   SD-w2 in-env:   3 × 2 × 6 × 30 = 1080
+        //   SD-w2 out-env:  2 × 1 × 6 × 30 =  360
+        //   SD-w3 in-env:   3 × 2 × 6 × 30 = 1080
+        //   SD-w3 out-env:  2 × 1 × 6 × 30 =  360
+        //   Total                           = 4500
+        assert_eq!(total, 4500);
+    }
+
+    #[test]
+    fn paams_aisle_width_tp_only_in_envelope() {
+        // Token Passing must appear only in cells with num_agents ≤ 100.
+        for (name, m) in paams_aisle_width() {
+            let has_tp = m.solvers.iter().any(|s| s == "token_passing");
+            let max_n = *m.agent_counts.iter().max().unwrap();
+            if has_tp {
+                assert!(
+                    max_n <= 100,
+                    "token_passing out of envelope in matrix {name} (max n={max_n})"
+                );
+            }
+        }
     }
 
     #[test]
@@ -538,7 +676,7 @@ mod tests {
 
         let matrix = ExperimentMatrix {
             solvers: vec!["pibt".into(), "rhcr_pbs".into(), "token_passing".into()],
-            topologies: vec!["warehouse_large".into()],
+            topologies: vec!["warehouse_single_dock".into()],
             scenarios: vec![None, Some(burst_20()), Some(burst_50())],
             schedulers: vec!["closest".into()],
             agent_counts: vec![20],
@@ -595,7 +733,7 @@ mod tests {
     /// Tier 3: Run all 8 solvers and validate performance expectations.
     ///
     /// This is the benchmark comparison test. It runs each solver on
-    /// warehouse_large with 40 agents for 500 ticks (5 seeds, no faults)
+    /// warehouse_single_dock with 40 agents for 500 ticks (5 seeds, no faults)
     /// and validates:
     /// 1. All solvers produce non-zero throughput
     /// 2. Performance ranking roughly matches paper expectations
@@ -614,7 +752,7 @@ mod tests {
         // Baseline only (no faults) for clean throughput comparison
         let matrix = ExperimentMatrix {
             solvers: vec!["pibt".into(), "rhcr_pbs".into(), "token_passing".into()],
-            topologies: vec!["warehouse_large".into()],
+            topologies: vec!["warehouse_single_dock".into()],
             scenarios: vec![None],
             schedulers: vec!["random".into()],
             agent_counts: vec![40],
@@ -638,7 +776,9 @@ mod tests {
                 .push(run.baseline_metrics.avg_throughput);
         }
 
-        eprintln!("\n=== Solver Benchmark Results (40 agents, warehouse_large, 500 ticks) ===");
+        eprintln!(
+            "\n=== Solver Benchmark Results (40 agents, warehouse_single_dock, 500 ticks) ==="
+        );
         eprintln!("{:<25} {:>8} {:>8} {:>8}", "Solver", "Mean TP", "Min TP", "Max TP");
         eprintln!("{}", "-".repeat(55));
 
@@ -662,7 +802,7 @@ mod tests {
         for (solver, mean) in &solver_means {
             assert!(
                 *mean > 0.0,
-                "solver {solver} produced zero throughput on warehouse_large with 40 agents"
+                "solver {solver} produced zero throughput on warehouse_single_dock with 40 agents"
             );
         }
 
@@ -671,6 +811,63 @@ mod tests {
         let mut f = fs::File::create("results/solver_benchmark_runs.csv").unwrap();
         write_runs_csv(&mut f, &result.runs).unwrap();
         eprintln!("\nSaved: results/solver_benchmark_runs.csv ({} rows)", result.runs.len() * 2);
+    }
+
+    /// Launch the full aisle-width sweep: all 5 matrices, runs CSVs + summary CSVs
+    /// written to `results/aisle_width/`. Set `MAFIS_TICK_EXPORT_DIR` to capture
+    /// per-tick throughput series (see runner::export_tick_series_if_enabled).
+    ///
+    /// Total: 4500 runs (see paams_aisle_width_counts test).
+    ///
+    /// Usage:
+    ///   MAFIS_TICK_EXPORT_DIR="$(pwd)/results/aisle_width/ticks" \
+    ///     cargo test --release --lib run_aisle_width_sweep -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn run_aisle_width_sweep() {
+        use crate::experiment::export::{write_runs_csv, write_summary_csv};
+        use crate::experiment::runner::{ExperimentProgress, run_matrix};
+        use std::fs;
+        use std::sync::{Arc, Mutex};
+        use std::time::Instant;
+
+        let out_dir = "results/aisle_width";
+        fs::create_dir_all(out_dir).unwrap();
+
+        let matrices = paams_aisle_width();
+        let grand_total: usize = matrices.iter().map(|(_, m)| m.total_runs()).sum();
+        let sweep_start = Instant::now();
+
+        eprintln!(
+            "\n=== Aisle-width sweep: {grand_total} total runs across {} matrices ===",
+            matrices.len()
+        );
+        for (name, matrix) in matrices {
+            let total = matrix.total_runs();
+            eprintln!("\n--- {name}: {total} runs ---");
+            let progress =
+                Arc::new(Mutex::new(ExperimentProgress { current: 0, total, label: name.into() }));
+
+            let m_start = Instant::now();
+            let result = run_matrix(&matrix, Some(&progress));
+            let m_wall_s = m_start.elapsed().as_secs();
+            eprintln!("  done in {m_wall_s}s ({} runs/s)", total as f64 / m_wall_s.max(1) as f64);
+
+            let runs_path = format!("{out_dir}/{name}_runs.csv");
+            let summary_path = format!("{out_dir}/{name}_summary.csv");
+            write_runs_csv(&mut fs::File::create(&runs_path).unwrap(), &result.runs).unwrap();
+            write_summary_csv(&mut fs::File::create(&summary_path).unwrap(), &result.summaries)
+                .unwrap();
+            eprintln!("  wrote {runs_path}, {summary_path}");
+        }
+
+        let total_s = sweep_start.elapsed().as_secs();
+        eprintln!(
+            "\n=== Aisle-width sweep complete: {grand_total} runs in {}h{:02}m{:02}s ===",
+            total_s / 3600,
+            (total_s % 3600) / 60,
+            total_s % 60,
+        );
     }
 
     #[test]

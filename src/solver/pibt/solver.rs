@@ -434,7 +434,8 @@ mod tests {
         use rand_chacha::ChaCha8Rng;
 
         let registry = TopologyRegistry::load_from_dir(std::path::Path::new("topologies"));
-        let entry = registry.find("warehouse_large").expect("warehouse_large.json missing");
+        let entry =
+            registry.find("warehouse_single_dock").expect("warehouse_single_dock.json missing");
         let (grid_owned, zones) = TopologyRegistry::parse_entry(entry).unwrap();
         let grid = &grid_owned;
         let mut rng = ChaCha8Rng::seed_from_u64(123);

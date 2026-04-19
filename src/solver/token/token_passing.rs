@@ -500,11 +500,14 @@ mod tests {
         use crate::experiment::runner::run_single_experiment;
 
         let registry = TopologyRegistry::load_from_dir(std::path::Path::new("topologies"));
-        assert!(registry.find("warehouse_large").is_some(), "warehouse_large.json missing");
+        assert!(
+            registry.find("warehouse_single_dock").is_some(),
+            "warehouse_single_dock.json missing"
+        );
 
         let config = ExperimentConfig {
             solver_name: "token_passing".into(),
-            topology_name: "warehouse_large".into(),
+            topology_name: "warehouse_single_dock".into(),
             scenario: None,
             scheduler_name: "random".into(),
             num_agents: 20,
@@ -515,7 +518,7 @@ mod tests {
         let result = run_single_experiment(&config);
         let tp = result.baseline_metrics.avg_throughput;
         eprintln!("token_passing_throughput_regression: tp={tp:.4} tasks/tick");
-        // Token Passing on warehouse_large at 20 agents should produce
+        // Token Passing on warehouse_single_dock at 20 agents should produce
         // measurable throughput (>0.05 tasks/tick). A regression to near-zero
         // would indicate broken sequential planning or constraint logic.
         assert!(
