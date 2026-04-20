@@ -389,8 +389,8 @@ pub fn paams_experiments() -> Vec<(&'static str, ExperimentMatrix)> {
 //
 // Three single-dock variants that differ ONLY in inter-rack aisle width:
 //   SD-w1 (57×33, aisle=1): existing warehouse_single_dock, fleet {20, 40, 60}
-//   SD-w2 (57×44, aisle=2): warehouse_sd_w2,               fleet {36, 72, 108}
-//   SD-w3 (57×55, aisle=3): warehouse_sd_w3,               fleet {50, 100, 151}
+//   SD-w2 (57×44, aisle=2): warehouse_single_dock_w2,               fleet {36, 72, 108}
+//   SD-w3 (57×55, aisle=3): warehouse_single_dock_w3,               fleet {50, 100, 151}
 //
 // Rack count (800 cells), pickup density, and fleet-density (agents /
 // walkable-cell) are held constant across the three maps; only aisle width —
@@ -455,7 +455,7 @@ pub fn paams_aisle_width() -> Vec<(&'static str, ExperimentMatrix)> {
             "aisle_width_w2_in_env",
             ExperimentMatrix {
                 solvers: solvers_all.clone(),
-                topologies: vec!["warehouse_sd_w2".into()],
+                topologies: vec!["warehouse_single_dock_w2".into()],
                 scenarios: scenarios.clone(),
                 schedulers: vec!["closest".into()],
                 agent_counts: vec![36, 72],
@@ -468,7 +468,7 @@ pub fn paams_aisle_width() -> Vec<(&'static str, ExperimentMatrix)> {
             "aisle_width_w2_out_env",
             ExperimentMatrix {
                 solvers: solvers_scalable.clone(),
-                topologies: vec!["warehouse_sd_w2".into()],
+                topologies: vec!["warehouse_single_dock_w2".into()],
                 scenarios: scenarios.clone(),
                 schedulers: vec!["closest".into()],
                 agent_counts: vec![108],
@@ -481,7 +481,7 @@ pub fn paams_aisle_width() -> Vec<(&'static str, ExperimentMatrix)> {
             "aisle_width_w3_in_env",
             ExperimentMatrix {
                 solvers: solvers_all,
-                topologies: vec!["warehouse_sd_w3".into()],
+                topologies: vec!["warehouse_single_dock_w3".into()],
                 scenarios: scenarios.clone(),
                 schedulers: vec!["closest".into()],
                 agent_counts: vec![50, 100],
@@ -494,7 +494,7 @@ pub fn paams_aisle_width() -> Vec<(&'static str, ExperimentMatrix)> {
             "aisle_width_w3_out_env",
             ExperimentMatrix {
                 solvers: solvers_scalable,
-                topologies: vec!["warehouse_sd_w3".into()],
+                topologies: vec!["warehouse_single_dock_w3".into()],
                 scenarios,
                 schedulers: vec!["closest".into()],
                 agent_counts: vec![151],
@@ -915,7 +915,7 @@ mod tests {
                 "aisle_width_w2_in_env_tp",
                 ExperimentMatrix {
                     solvers: tp_solver.clone(),
-                    topologies: vec!["warehouse_sd_w2".into()],
+                    topologies: vec!["warehouse_single_dock_w2".into()],
                     scenarios: scenarios.clone(),
                     schedulers: vec!["closest".into()],
                     agent_counts: vec![36, 72],
@@ -927,7 +927,7 @@ mod tests {
                 "aisle_width_w3_in_env_tp",
                 ExperimentMatrix {
                     solvers: tp_solver,
-                    topologies: vec!["warehouse_sd_w3".into()],
+                    topologies: vec!["warehouse_single_dock_w3".into()],
                     scenarios,
                     schedulers: vec!["closest".into()],
                     agent_counts: vec![50, 100],

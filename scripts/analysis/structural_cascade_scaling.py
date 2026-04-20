@@ -26,13 +26,13 @@ ANA.mkdir(parents=True, exist_ok=True)
 # Walkable cell counts (from topology JSON audit)
 WALKABLE = {
     "warehouse_single_dock": 843,
-    "warehouse_sd_w2": 1510,
-    "warehouse_sd_w3": 2115,
+    "warehouse_single_dock_w2": 1510,
+    "warehouse_single_dock_w3": 2115,
 }
 AISLE = {
     "warehouse_single_dock": 1,
-    "warehouse_sd_w2": 2,
-    "warehouse_sd_w3": 3,
+    "warehouse_single_dock_w2": 2,
+    "warehouse_single_dock_w3": 3,
 }
 TIER = {20: "L", 40: "M", 60: "H", 36: "L", 72: "M", 108: "H", 50: "L", 100: "M", 151: "H"}
 

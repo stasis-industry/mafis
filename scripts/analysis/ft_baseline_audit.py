@@ -25,8 +25,8 @@ ANA.mkdir(parents=True, exist_ok=True)
 
 AISLE = {
     "warehouse_single_dock": 1,
-    "warehouse_sd_w2": 2,
-    "warehouse_sd_w3": 3,
+    "warehouse_single_dock_w2": 2,
+    "warehouse_single_dock_w3": 3,
 }
 TIER = {20: "L", 40: "M", 60: "H", 36: "L", 72: "M", 108: "H", 50: "L", 100: "M", 151: "H"}
 COLORS = {"pibt": "#1f77b4", "rhcr_pbs": "#ff7f0e", "token_passing": "#2ca02c"}
