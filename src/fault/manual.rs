@@ -357,6 +357,35 @@ fn restore_world_state(
     }
     res.dist_cache.clear();
 
+    // Restore solver-specific planning caches that `reset()` / `restore_priorities()`
+    // did not recover. Token Passing rebuilds its per-agent token paths (and,
+    // implicitly, the MasterConstraintIndex on the next step) from each agent's
+    // restored planned_actions. Without this, TP replay diverges because the
+    // constraint index starts empty while the original run had multi-step plans
+    // active at this tick. PIBT and RHCR-PBS default to no-op.
+    {
+        use crate::core::action::Action;
+        use crate::solver::lifelong::AgentRestoreState;
+        let actions_per_agent: Vec<Vec<Action>> = snapshot
+            .agents
+            .iter()
+            .map(|s| s.planned_actions.iter().map(|&b| Action::from_u8(b)).collect())
+            .collect();
+        let restore_data: Vec<AgentRestoreState> = snapshot
+            .agents
+            .iter()
+            .zip(actions_per_agent.iter())
+            .map(|(s, actions)| AgentRestoreState {
+                index: s.index,
+                pos: s.pos,
+                goal: Some(s.goal),
+                task_leg: s.reconstruct_task_leg(),
+                planned_actions: actions.as_slice(),
+            })
+            .collect();
+        res.solver.restore_state(&restore_data);
+    }
+
     // Restore lifelong task count + completion_ticks window for correct throughput
     res.lifelong.restore_from_snapshot(
         snapshot.lifelong_tasks_completed,
@@ -428,6 +457,30 @@ fn restore_runner_state(
     runner.solver_mut().reset();
     if !snapshot.solver_priorities.is_empty() {
         runner.solver_mut().restore_priorities(&snapshot.solver_priorities);
+    }
+
+    // Rebuild solver-specific planning caches (see comment on the ECS path).
+    {
+        use crate::core::action::Action;
+        use crate::solver::lifelong::AgentRestoreState;
+        let actions_per_agent: Vec<Vec<Action>> = snapshot
+            .agents
+            .iter()
+            .map(|s| s.planned_actions.iter().map(|&b| Action::from_u8(b)).collect())
+            .collect();
+        let restore_data: Vec<AgentRestoreState> = snapshot
+            .agents
+            .iter()
+            .zip(actions_per_agent.iter())
+            .map(|(s, actions)| AgentRestoreState {
+                index: s.index,
+                pos: s.pos,
+                goal: Some(s.goal),
+                task_leg: s.reconstruct_task_leg(),
+                planned_actions: actions.as_slice(),
+            })
+            .collect();
+        runner.solver_mut().restore_state(&restore_data);
     }
 
     // Completion state

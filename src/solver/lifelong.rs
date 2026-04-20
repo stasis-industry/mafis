@@ -39,6 +39,20 @@ pub struct AgentState {
     pub task_leg: TaskLeg,
 }
 
+/// Per-agent data passed to `LifelongSolver::restore_state` during rewind.
+///
+/// Bundles the subset of `AgentState` needed to reconstruct solver-internal
+/// planning caches (e.g. Token Passing's per-agent token paths) from the
+/// restored snapshot.
+#[derive(Clone, Debug)]
+pub struct AgentRestoreState<'a> {
+    pub index: usize,
+    pub pos: IVec2,
+    pub goal: Option<IVec2>,
+    pub task_leg: TaskLeg,
+    pub planned_actions: &'a [crate::core::action::Action],
+}
+
 // ---------------------------------------------------------------------------
 // Step result — borrows from solver's internal buffer
 // ---------------------------------------------------------------------------
@@ -85,6 +99,20 @@ pub trait LifelongSolver: Send + Sync + 'static {
     /// Restore internal priority state from a snapshot.
     /// Default: no-op (solver reinitializes on next step).
     fn restore_priorities(&mut self, _priorities: &[f32]) {}
+
+    /// Rebuild solver-specific planning caches from the post-rewind agent
+    /// state + their restored planned actions. Called by the rewind machinery
+    /// AFTER `reset()` + `restore_priorities()` so the solver can use the
+    /// re-materialised plans to re-seed any state that `reset()` just cleared.
+    ///
+    /// Required to keep Token Passing deterministic across rewinds: TP's
+    /// `MasterConstraintIndex` is rebuilt every step from the per-agent token
+    /// paths, so losing the paths on reset makes subsequent A* plans diverge
+    /// from the original run.
+    ///
+    /// Default: no-op (PIBT, RHCR-PBS have no path-based state to restore —
+    /// they replan fresh each tick or each window).
+    fn restore_state(&mut self, _agents: &[AgentRestoreState]) {}
 
     /// Drain pending goal overrides produced by the last `step()`.
     /// Solvers that swap goals (e.g. TPTS) return `(agent_index, new_goal)` pairs.
@@ -147,5 +175,9 @@ impl ActiveSolver {
 
     pub fn restore_priorities(&mut self, priorities: &[f32]) {
         self.solver.restore_priorities(priorities);
+    }
+
+    pub fn restore_state(&mut self, agents: &[AgentRestoreState]) {
+        self.solver.restore_state(agents);
     }
 }
