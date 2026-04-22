@@ -5,6 +5,64 @@ Items are not prioritized within a section — promote to a GitHub Issue when re
 
 ---
 
+## Current state — 2026-04-22
+
+**Branch:** `feat/metric-rationalization` (PR #22). 14 commits ahead of main.
+CI locally green.
+
+**Completed in this work cycle:**
+- ✅ Structural cascade metric + MAX_CASCADE_DEPTH 10 → 200 (commit `2340eac`)
+- ✅ Topology rename `warehouse-sd-w*` → `warehouse-single-dock-w*`
+  (`97b65f3`) + SD-w2 `number_agents` demo default capped at 72 to stay
+  inside TP's A* envelope
+- ✅ Queue kick-back stranding fix: `goal = agent.pos` instead of
+  `pickup_cell` (`2ee0313`) — resolves user-reported "agents stuck at
+  delivery in picking state"; Loading-streak ceiling ≤ 5 ticks verified
+- ✅ Token Passing goal-change sync + rewind determinism (`845a6fb`)
+- ✅ Aisle-width sweep: 3 single-dock variants (w1 / w2 / w3) × 3
+  solvers × 6 scenarios × 30 seeds. Post-kick-back-fix re-run on 3960
+  priority cells done (34h30m wall). Full results frozen in the memory
+  file `project_paams_aisle_width_results.md` and in
+  `docs/papers/paper1_drafts/paams2026/section6_draft.md` (local only).
+
+**Three publishable findings (post-fix, numbers frozen):**
+
+1. **Structural cascade ∝ walkable area** at matched density —
+   R² = 0.999 / 1.000 / 0.999 at tiers L / M / H.
+2. **Mitigation Δ diverges with aisle width**, paradigm-ordered:
+   RHCR-PBS −0.89 > PIBT −0.81 > Token Passing −0.41 per aisle step.
+   TP artefact caveat: its ADG cascade ≈ 1.01 by construction.
+3. **Aggregate FT is invariant to aisle width** at matched density
+   (PIBT 0.592 / 0.602 / 0.598 across w1 / w2 / w3) — motivates the
+   decomposition. 6/150 cells Braess-flagged, all RHCR-PBS at high
+   density.
+
+Pre-fix → post-fix drift: mean |Δ FT%| = 3.36%, comparative findings
+preserved (§6.7 disclosure ready).
+
+**Immediate remaining work — paper (highest priority):**
+- Integrate the filled §6 draft from
+  `docs/papers/paper1_drafts/paams2026/section6_draft.md` into
+  `main.tex`. Regenerate the 5 figure references to the post-fix
+  PNGs under `results/aisle_width/analysis/`.
+- Refresh Table references to use the mitigation Δ + FT numbers in
+  the updated draft.
+- Write §6.7 correction-disclosure paragraph from
+  `results/aisle_width/post_kickback_fix/delta_diff.csv`.
+- Re-compile main.tex, confirm within 12-page LNCS budget, submit
+  to AREA workshop by 2026-05-08.
+
+**Deferred (tracked as post-submission work):**
+- Task #67 — solver fidelity tests vs canonical pibt2 / RHCR C++
+  references (gated behind a `fidelity` feature flag). Acceptance:
+  throughput ±3%, action-sequence Hamming ≤ 5% on first 50 ticks.
+- Out-of-envelope TP replanning — PIBT-fallback path inside
+  Token Passing so TP at n > 100 stops deadlocking. Would let us
+  report TP at SD-w2 n=108 and SD-w3 n=151 as legitimate cells
+  rather than "out of envelope — skip".
+
+---
+
 ## Solver: RHCR Improvements
 
 ### PBS — Focal Search (FOCAL_W heuristic)
@@ -72,9 +130,9 @@ Items are not prioritized within a section — promote to a GitHub Issue when re
 ## Machine Learning / Deep Reinforcement Learning
 
 ### DRL Solver (PRIMAL-style — 5th Paradigm: Learned)
-**Status:** Not implemented. All 7 solvers use classical algorithms.  
+**Status:** Not implemented. Current 3 solvers (PIBT, RHCR-PBS, Token Passing) use classical algorithms.  
 **Impact:** High research value — the key question for MAFIS is not "does DRL solve MAPF well?" but "does a learned policy degrade differently under faults than classical solvers?" DRL trained on fault-free maps may collapse faster under Weibull wear than PIBT, or generalize better due to implicit variation during training.  
-**What's needed:** Decentralized DRL solver where each agent acts from a local observation (k×k grid patch + goal direction + nearby agent states). Implements `LifelongSolver` trait — one `step()` call per tick, no window. Candidate architectures: PRIMAL (Sartoretti et al., 2019), MAGAT (Li et al., 2021).  
+**What's needed:** Decentralized DRL solver where each agent acts from a local observation (k×k grid patch + goal direction + nearby agent states). Implements `LifelongSolver` trait — one `step()` call per tick, no window. Candidate architectures: PRIMAL (Sartoretti et al., 2019), MAGAT (Li et al., 2021). Would be the 4th solver alongside the current 3 classical solvers (PIBT, RHCR-PBS, Token Passing).  
 **Research angle:** Run the full fault scenario matrix (5 scenarios × all topologies) with the DRL solver alongside classical solvers. Compare resilience profiles in the scorecard.
 
 ### DRL Adaptive Scheduler

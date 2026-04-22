@@ -19,7 +19,12 @@ import pandas as pd
 from scipy.stats import linregress
 
 OUT = Path("results/aisle_width")
-SRC = OUT / "merged" if (OUT / "merged").exists() else OUT
+if (OUT / "merged_post_fix").exists():
+    SRC = OUT / "merged_post_fix"
+elif (OUT / "merged").exists():
+    SRC = OUT / "merged"
+else:
+    SRC = OUT
 ANA = OUT / "analysis"
 ANA.mkdir(parents=True, exist_ok=True)
 
