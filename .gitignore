@@ -1,0 +1,43 @@
+/target
+**/.DS_Store
+
+*.wasm
+web/mafis.js
+web/mafis.d.ts
+web/mafis_bg.wasm.d.ts
+web/topologies/
+
+settings.local.json
+
+results/
+**__pycache__
+
+# Graphify
+.graphify_analysis.json
+.graphify_python
+**/graphify-out/
+
+# Environment & IDE
+.env
+.env.*
+.vscode/
+.idea/
+*.swp
+
+# Secrets & certificates
+*.pem
+*.key
+*.p12
+*.pfx
+
+# OS artifacts
+Thumbs.db
+Desktop.ini
+
+# Owner's local working files (paper drafts + experiment data)
+/tmp/
+/results_apr9_backup/
+/CLAUDE.original.md
+
+# Demo asset (host as GitHub release attachment instead)
+/assets/gif/demo.gif

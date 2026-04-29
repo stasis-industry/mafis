@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ── Formatting check (~10s, no system deps needed) ──────────────────────────
+  fmt:
+    name: Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: cargo fmt --check
+        run: cargo fmt --check
+
+  # ── Type check, clippy, and tests ───────────────────────────────────────────
+  test:
+    name: Check, Clippy & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      # Bevy 0.18 on Linux requires these system libraries to compile
+      # (winit, udev input, ALSA audio, XKB keyboard — pulled in by default_platform)
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            libudev-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            pkg-config
+
+      # Step 1 — fast type/borrow check (~5s)
+      - name: cargo check (native)
+        run: cargo check
+
+      # Step 2 — lint with deny warnings + targeted allow-list
+      # collapsible_if: style preference, nested let-chains are often more readable
+      # needless_range_loop / only_used_in_recursion: legitimate patterns in solvers
+      - name: cargo clippy
+        run: |
+          cargo clippy -- -D warnings \
+            -A clippy::collapsible-if \
+            -A clippy::needless_range_loop \
+            -A clippy::only_used_in_recursion
+
+      # Step 3 — 500+ tests (~10s)
+      - name: cargo test
+        run: cargo test
+
+      # Step 4 — WASM compile check (catches wasm32-specific errors before a full build)
+      - name: cargo check (wasm32)
+        run: cargo check --target wasm32-unknown-unknown
+
+  # ── Security audit (runs in parallel) ──────────────────────────────────────
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: cargo audit
+        run: cargo audit

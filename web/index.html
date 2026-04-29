@@ -1,0 +1,1513 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <!-- Security headers -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com/uplot/ 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' https://fonts.googleapis.com https://unpkg.com/uplot/ 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+
+    <!-- Primary Meta Tags -->
+    <title>MAFIS — Multi-Agent Fault Injection Simulator</title>
+    <meta name="title" content="MAFIS — Multi-Agent Fault Injection Simulator">
+    <meta name="description" content="Fault resilience observatory for lifelong multi-agent path finding (MAPF). Real-time 3D WebAssembly simulation measuring how warehouse robotics systems degrade, recover, and adapt under fault conditions. 3 lifelong MAPF solvers, up to 1000 agents.">
+    <meta name="keywords" content="MAPF, multi-agent path finding, fault injection, warehouse robotics, simulation, PIBT, RHCR, fault resilience, WebAssembly, Bevy, lifelong MAPF, Token Passing">
+    <meta name="author" content="Teddy Truong">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://stasis-website.vercel.app/">
+    <meta name="theme-color" content="#1a1a2e">
+
+    <!-- Academic citation metadata -->
+    <meta name="citation_title" content="MAFIS: Multi-Agent Fault Injection Simulator">
+    <meta name="citation_author" content="Teddy Truong">
+    <meta name="citation_publication_date" content="2025">
+    <meta name="citation_software_url" content="https://stasis-website.vercel.app">
+    <meta name="citation_repository_url" content="https://github.com/stasis-industries/mafis">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://stasis-website.vercel.app/">
+    <meta property="og:title" content="MAFIS — Multi-Agent Fault Injection Simulator">
+    <meta property="og:description" content="Fault resilience observatory for lifelong MAPF. Real-time 3D WebAssembly simulation of warehouse robotics under fault conditions. 3 lifelong MAPF solvers, up to 1000 agents.">
+    <!-- TODO: confirm og-image asset exists at deployment URL before launch -->
+    <meta property="og:image" content="https://stasis-website.vercel.app/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="MAFIS simulator showing multi-agent warehouse simulation with fault injection visualization">
+    <meta property="og:site_name" content="MAFIS">
+    <meta property="og:locale" content="en_US">
+
+    <!-- Twitter/X Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="MAFIS — Multi-Agent Fault Injection Simulator">
+    <meta name="twitter:description" content="Fault resilience observatory for lifelong MAPF. Real-time 3D WebAssembly simulation of warehouse robotics under fault conditions.">
+    <!-- TODO: confirm og-image asset exists at deployment URL before launch -->
+    <meta name="twitter:image" content="https://stasis-website.vercel.app/og-image.png">
+    <meta name="twitter:image:alt" content="MAFIS simulator showing multi-agent warehouse simulation with fault injection visualization">
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": ["SoftwareApplication", "WebApplication"],
+        "name": "MAFIS — Multi-Agent Fault Injection Simulator",
+        "alternateName": "MAFIS",
+        "description": "A fault resilience observatory for lifelong multi-agent path finding (MAPF). Measures how multi-agent warehouse robotics systems degrade, recover, and adapt under real-world fault conditions in real-time 3D WebAssembly simulation.",
+        "url": "https://stasis-website.vercel.app",
+        "applicationCategory": "Simulation Software",
+        "applicationSubCategory": "Multi-Agent Systems Research",
+        "operatingSystem": "Web Browser (Chrome, Firefox, Safari, Edge)",
+        "browserRequirements": "Requires WebAssembly and WebGL2 support",
+        "softwareVersion": "0.5.0",
+        "programmingLanguage": ["Rust", "WebAssembly", "JavaScript"],
+        "runtimePlatform": "WebAssembly (wasm32-unknown-unknown)",
+        "featureList": [
+            "Real-time 3D multi-agent simulation (up to 1000 agents)",
+            "3 lifelong MAPF solvers: PIBT, RHCR-PBS, Token Passing",
+            "Fault injection with heat accumulation and Weibull wear modeling",
+            "Action Dependency Graph (ADG) analysis",
+            "Cascade failure propagation via bounded BFS",
+            "Deterministic replay with seeded randomness",
+            "Resilience scorecard and throughput metrics",
+            "Configurable warehouse topologies",
+            "CSV/JSON data export for offline analysis"
+        ],
+        "screenshot": "https://stasis-website.vercel.app/og-image.png",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD",
+            "availability": "https://schema.org/InStock"
+        },
+        "author": {
+            "@type": "Organization",
+            "name": "Teddy Truong",
+            "url": "https://stasis-website.vercel.app"
+        },
+        "datePublished": "2025-01-01",
+        "dateModified": "2026-04-28",
+        "license": "https://opensource.org/licenses/MIT",
+        "keywords": ["multi-agent path finding", "MAPF", "fault injection", "warehouse robotics", "fault resilience", "simulation", "WebAssembly", "lifelong MAPF", "PIBT", "RHCR", "LaCAM", "Token Passing", "APF"],
+        "isAccessibleForFree": true
+    }
+    </script>
+
+    <!-- Fonts (non-render-blocking) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500&family=Playfair+Display:wght@400;500&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500&family=Playfair+Display:wght@400;500&display=swap" rel="stylesheet"></noscript>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://unpkg.com/uplot/dist/uPlot.min.css" crossorigin="anonymous">
+    <script src="https://unpkg.com/uplot/dist/uPlot.iife.min.js" defer crossorigin="anonymous"></script>
+</head>
+
+<body>
+    <!-- SEO content — visible to crawlers, hidden after WASM loads -->
+    <article id="seo-content" style="max-width:800px;margin:2rem auto;padding:0 1rem;font-family:Inter,sans-serif;color:#d0cec4" aria-label="About MAFIS">
+        <h1 style="font-size:1.5rem;margin-bottom:0.5rem">MAFIS: Multi-Agent Fault Injection Simulator</h1>
+        <p>A fault resilience observatory for lifelong multi-agent path finding (MAPF). MAFIS measures how multi-agent warehouse robotics systems degrade, recover, and adapt under real-world fault conditions in real-time 3D simulation.</p>
+        <h2 style="font-size:1.1rem;margin-top:1rem">What MAFIS Measures</h2>
+        <ul>
+            <li>Cascade failure propagation across agent networks via Action Dependency Graphs</li>
+            <li>Recovery time and throughput degradation under configurable fault injection</li>
+            <li>Heat accumulation and Weibull wear patterns on warehouse grid cells</li>
+            <li>Comparative resilience across 3 lifelong MAPF solvers (PIBT, RHCR-PBS, Token Passing)</li>
+        </ul>
+        <h2 style="font-size:1.1rem;margin-top:1rem">Key Features</h2>
+        <ul>
+            <li>Real-time 3D WebAssembly simulation with up to 1000 agents</li>
+            <li>Deterministic replay via seeded randomness for reproducible experiments</li>
+            <li>Fault scenarios: burst failures, zone outages, gradual degradation</li>
+            <li>Analysis: ADG construction, cascade BFS, resilience scorecards, heatmaps</li>
+            <li>Multiple warehouse topologies with visual map editor</li>
+            <li>CSV/JSON export for offline analysis</li>
+        </ul>
+    </article>
+    <script>
+        // Hide SEO content once WASM app loads (it's for crawlers, not users)
+        document.addEventListener('DOMContentLoaded', () => {
+            const seo = document.getElementById('seo-content');
+            if (seo) seo.style.display = 'none';
+        });
+    </script>
+
+    <!-- Demo Splash (visible before WASM loads) -->
+    <div id="demo-splash">
+        <div class="demo-splash-inner">
+            <div class="demo-splash-title">MAFIS</div>
+            <div class="demo-splash-sub">Fault resilience observatory for warehouse robotics</div>
+            <button class="demo-splash-btn" id="demo-watch-btn" disabled>Loading…</button>
+            <div class="demo-splash-progress" id="demo-splash-progress">Downloading simulator</div>
+        </div>
+    </div>
+
+    <script>
+        // Hide splash instantly for returning users (before WASM loads)
+        if (localStorage.getItem('mafis-demo-seen')) {
+            document.getElementById('demo-splash').style.display = 'none';
+        }
+    </script>
+
+    <!-- Header -->
+    <header id="header">
+        <a href="https://stasis-website.vercel.app" target="_blank" rel="noopener noreferrer" class="header-title">MAFIS</a>
+        <span class="header-version" id="header-version"></span>
+        <span class="header-status" id="header-status" style="display:none">IDLE</span>
+        <button class="btn-header btn-exp-mode" id="btn-exp-mode" title="Toggle between Observatory and Experiments">EXPERIMENTS</button>
+        <button class="btn-header btn-share" id="btn-share" title="Copy shareable URL to clipboard">SHARE</button>
+        <div class="header-spacer"></div>
+        <span class="header-fps" id="header-fps">60</span>
+        <button class="btn-header btn-metrics-info" id="btn-metrics-info" title="Metrics explanation">&#x2139;</button>
+        <button class="btn-header" id="btn-settings" title="Graphics settings" aria-label="Graphics settings">&#9881;</button>
+        <button class="btn-theme" id="btn-theme" title="Toggle dark mode" aria-label="Toggle dark mode">&#9789;</button>
+    </header>
+
+    <!-- Main grid -->
+    <div id="app-grid">
+        <!-- Left panel -->
+        <aside id="panel-left" class="panel">
+            <!-- Simulation -->
+            <section>
+                <h3 class="panel-section-title section-toggle" role="button" tabindex="0" aria-expanded="false" data-target="sim-content">&#x25B8; Simulation</h3>
+                <div class="section-content" id="sim-content">
+                    <div class="panel-divider"></div>
+
+                    <!-- Topology maps (loaded from web/topologies/) -->
+                    <div class="preset-label">MAP</div>
+                    <div class="preset-grid" id="topology-presets">
+                        <!-- Populated dynamically from manifest.json -->
+                    </div>
+                    <div id="topology-empty" class="topology-empty" style="display:none;">
+                        No maps available. <a href="mapmaker.html">Create one</a> and add it to <code>web/topologies/</code>.
+                    </div>
+
+                    <!-- Customize controls (shown for custom/imported maps) -->
+                    <div id="sim-customize-controls" style="display:none">
+                        <!-- Agent count is determined by map JSON (number_agents field) — no slider -->
+                        <input type="hidden" id="input-agents" value="0">
+                        <span id="val-agents" style="display:none">0</span>
+                        <span id="map-capacity" style="display:none"></span>
+
+                        <div class="input-group" title="Grid width in cells (8-512).">
+                            <label class="input-label" for="input-grid-width">Grid width</label>
+                            <div class="slider-row">
+                                <input type="range" id="input-grid-width" min="8" max="512" value="25" step="1" aria-label="Grid width">
+                                <span class="slider-value" id="val-grid-width">25</span>
+                            </div>
+                        </div>
+
+                        <div class="input-group" title="Grid height in cells (8-512).">
+                            <label class="input-label" for="input-grid-height">Grid height</label>
+                            <div class="slider-row">
+                                <input type="range" id="input-grid-height" min="8" max="512" value="15" step="1" aria-label="Grid height">
+                                <span class="slider-value" id="val-grid-height">15</span>
+                            </div>
+                            <span class="slider-detail" id="val-storage-rows" style="display:none"></span>
+                        </div>
+
+                        <div class="input-group" id="density-group" title="Percentage of grid cells blocked by obstacles (0%-30%)">
+                            <label class="input-label" for="input-density">Obstacle density</label>
+                            <div class="slider-row">
+                                <input type="range" id="input-density" min="0" max="0.3" value="0.15" step="0.01" aria-label="Obstacle density">
+                                <span class="slider-value" id="val-density">0.15</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Seed — always visible -->
+                    <div class="input-group" id="seed-group" style="margin-top: 12px;" title="Random seed for reproducible results (0-9999)">
+                        <label class="input-label" for="input-seed">Seed</label>
+                        <input type="number" class="input-field" id="input-seed" min="0" max="9999" value="42" aria-label="Random seed">
+                    </div>
+
+                    <!-- Scenario info (shown when scenario imported) -->
+                    <div id="sim-scenario-info" style="display:none">
+                        <div class="scenario-info-card">
+                            <div class="scenario-info-name" id="scenario-info-name"></div>
+                            <div class="scenario-info-row"><span>Grid</span><span class="mono" id="scenario-info-dims"></span></div>
+                            <div class="scenario-info-row"><span>Agents</span><span class="mono" id="scenario-info-agents"></span></div>
+                        </div>
+                        <button class="btn-secondary" id="btn-clear-scenario">Clear</button>
+                    </div>
+
+                    <!-- Custom Map section -->
+                    <div id="custom-map-section" style="margin-top: 12px;">
+                        <div class="import-subsection-label">CUSTOM MAP</div>
+                        <div class="custom-map-actions">
+                            <a href="mapmaker.html" class="btn-secondary btn-mapmaker" id="btn-create-map"
+                                title="Open the Map Maker to design a custom map">Create Map</a>
+                            <label class="btn-secondary btn-load-json" id="label-load-json"
+                                title="Load a map maker JSON file">
+                                Load JSON
+                                <input type="file" id="input-load-json" accept=".json" class="file-input-hidden">
+                            </label>
+                        </div>
+                        <div id="custom-map-status" class="import-status"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Solver & Scheduling -->
+            <section>
+                <h3 class="panel-section-title section-toggle" role="button" tabindex="0" aria-expanded="false" data-target="solver-sched-content">&#x25B8; Solver &amp; Scheduling</h3>
+                <div class="section-content" id="solver-sched-content">
+                    <div class="panel-divider"></div>
+
+                    <div class="input-group"
+                        title="MAPF algorithm used for path planning. RHCR (PBS) is native-only — it needs rayon parallelism that WASM can't provide. Run the desktop build to use RHCR.">
+                        <label class="input-label" for="input-solver">Algorithm</label>
+                        <select class="input-select" id="input-solver" aria-label="Solver algorithm">
+                            <optgroup label="Reactive (suboptimal, fast)">
+                                <option value="pibt">PIBT — Priority Inheritance</option>
+                            </optgroup>
+                            <optgroup label="Decentralized (suboptimal, sequential)">
+                                <option value="token_passing">Token Passing</option>
+                            </optgroup>
+                        </select>
+                        <div class="input-hint" style="color: var(--text-dim); font-size: 0.75em; margin-top: 4px;">
+                            RHCR (PBS) is desktop-only — needs multi-threaded planning.
+                        </div>
+                    </div>
+
+                    <!-- RHCR advanced params — shown only when an RHCR variant is selected -->
+                    <div id="rhcr-params" style="display:none;">
+                        <div class="input-group" title="Planning horizon — how many steps ahead to plan each window (H)">
+                            <label class="input-label" for="input-rhcr-horizon">Horizon (H)</label>
+                            <input type="number" class="input-field" id="input-rhcr-horizon" min="5" max="40" value="10">
+                        </div>
+                        <div class="input-group" title="Replan interval — ticks between replans (W)">
+                            <label class="input-label" for="input-rhcr-replan">Replan (W)</label>
+                            <input type="number" class="input-field" id="input-rhcr-replan" min="2" max="40" value="5">
+                        </div>
+                        <div class="input-hint" id="rhcr-auto-hint" style="color: var(--text-dim); font-size: 0.8em; margin-top: 4px;"></div>
+                    </div>
+
+                    <div id="solver-info-card" class="solver-info-card"
+                        style="display: none; font-size: 0.85em; padding: 8px; background: var(--bg-hover); border-radius: 4px; margin-top: 8px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span title="Solution quality guarantee"><strong>Opt:</strong> <span
+                                    id="info-opt"></span></span>
+                            <span title="Ability to handle many agents"><strong>Scale:</strong> <span
+                                    id="info-scale"></span></span>
+                        </div>
+                        <div style="color: var(--text-dim);" id="info-desc"></div>
+                        <div style="color: var(--text-dim); margin-top: 6px;" id="info-source"></div>
+                        <div id="info-warning"
+                            style="color: #ff9900; margin-top: 4px; font-weight: bold; display: none;"></div>
+                    </div>
+
+                    <div class="input-group" style="margin-top: 12px;"
+                        title="Task scheduler algorithm. Determines how new goals are assigned when agents complete tasks.">
+                        <label class="input-label" for="input-scheduler">Scheduler</label>
+                        <select class="input-select" id="input-scheduler" aria-label="Task scheduler">
+                            <option value="random">Random</option>
+                            <option value="closest">Closest First</option>
+                        </select>
+                    </div>
+
+                    <div class="input-group" title="Simulation duration in ticks">
+                        <label class="input-label">Duration</label>
+                        <div class="preset-row" id="duration-presets">
+                            <button class="preset-btn" data-duration="200">Short</button>
+                            <button class="preset-btn active" data-duration="500">Medium</button>
+                            <button class="preset-btn" data-duration="1000">Long</button>
+                        </div>
+                        <div class="slider-row" style="margin-top:4px">
+                            <input type="number" class="input-field" id="input-duration" min="50" max="1000000" value="500" style="width:70px">
+                            <span class="input-hint">ticks</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Fault Injection -->
+            <section>
+                <h3 class="panel-section-title section-toggle" role="button" tabindex="0" aria-expanded="false" data-target="fault-content">&#x25B8; Fault Injection</h3>
+                <div class="section-content" id="fault-content">
+                    <div class="panel-divider"></div>
+
+                    <div id="fault-config-panel">
+                        <!-- Add fault form (header) -->
+                        <div class="fault-add-form">
+                            <div class="input-group">
+                                <select class="input-select" id="input-fault-type" title="Choose fault type" aria-label="Fault type">
+                                    <option value="burst_failure" selected>Burst Failure</option>
+                                    <option value="wear_based">Wear-Based</option>
+                                    <option value="zone_outage">Spatial Zone Outage</option>
+                                    <option value="intermittent_fault">Intermittent</option>
+                                </select>
+                            </div>
+
+                            <!-- Burst params -->
+                            <div id="fl-params-burst" class="fl-params">
+                                <div class="input-group" title="Percentage of alive fleet to kill">
+                                    <label class="input-label">Kill %</label>
+                                    <div class="slider-row">
+                                        <input type="range" id="fl-burst-pct" min="1" max="100" value="20" step="1">
+                                        <span class="slider-value" id="fl-burst-pct-val">20%</span>
+                                    </div>
+                                    <span class="input-hint" id="fl-burst-abs">(= 4 robots)</span>
+                                </div>
+                                <div class="input-group" title="Tick at which burst fires">
+                                    <label class="input-label">At tick</label>
+                                    <div class="slider-row">
+                                        <input type="range" id="fl-burst-tick" min="1" max="500" value="100" step="1">
+                                        <span class="slider-value" id="fl-burst-tick-val">100</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Wear params -->
+                            <div id="fl-params-wear" class="fl-params" style="display:none">
+                                <div class="input-group" title="Weibull wear intensity">
+                                    <label class="input-label">Intensity</label>
+                                    <div class="preset-row" id="fl-wear-presets">
+                                        <button class="preset-btn" data-rate="low">Low</button>
+                                        <button class="preset-btn active" data-rate="medium">Med</button>
+                                        <button class="preset-btn" data-rate="high">High</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Zone params -->
+                            <div id="fl-params-zone" class="fl-params" style="display:none">
+                                <div class="input-group" title="Tick at which zone latency fires">
+                                    <label class="input-label">At tick</label>
+                                    <div class="slider-row">
+                                        <input type="range" id="fl-zone-tick" min="1" max="500" value="100" step="1">
+                                        <span class="slider-value" id="fl-zone-tick-val">100</span>
+                                    </div>
+                                </div>
+                                <div class="input-group" title="Duration of latency (ticks)">
+                                    <label class="input-label">Duration</label>
+                                    <div class="slider-row">
+                                        <input type="range" id="fl-zone-dur" min="10" max="200" value="50" step="1">
+                                        <span class="slider-value" id="fl-zone-dur-val">50</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Intermittent params -->
+                            <div id="fl-params-intermittent" class="fl-params" style="display:none">
+                                <div class="input-group" title="Mean ticks between faults per agent (exponential inter-arrival)">
+                                    <label class="input-label">MTBF (ticks)</label>
+                                    <div class="slider-row">
+                                        <input type="range" id="fl-inter-mtbf" min="10" max="500" value="80" step="1">
+                                        <span class="slider-value" id="fl-inter-mtbf-val">80</span>
+                                    </div>
+                                </div>
+                                <div class="input-group" title="Ticks agent is unavailable per fault">
+                                    <label class="input-label">Recovery (ticks)</label>
+                                    <div class="slider-row">
+                                        <input type="range" id="fl-inter-rec" min="1" max="100" value="15" step="1">
+                                        <span class="slider-value" id="fl-inter-rec-val">15</span>
+                                    </div>
+                                </div>
+                                <div class="input-group" title="No faults fire before this tick — first fire lands at start_tick + Exp(MTBF). Set to MTBF for a deterministic warm-up window.">
+                                    <label class="input-label">Start tick (warm-up)</label>
+                                    <div class="slider-row">
+                                        <input type="range" id="fl-inter-start" min="0" max="1000" value="0" step="1">
+                                        <span class="slider-value" id="fl-inter-start-val">0</span>
+                                    </div>
+                                </div>
+                                <!-- Live preview: expected event statistics -->
+                                <div id="intermittent-preview" class="intermittent-preview"></div>
+                            </div>
+
+                            <button class="btn-secondary" id="btn-add-fault" style="width:100%;margin-top:4px">+ ADD FAULT</button>
+                        </div>
+
+                        <!-- Fault list (items appear here) -->
+                        <div id="fault-list-items" class="fault-list-items">
+                            <div class="fault-list-empty">No faults configured</div>
+                        </div>
+                    </div>
+
+                    <!-- Manual fault injection -->
+                    <div id="manual-fault-section" style="display:none;">
+                        <div class="panel-divider"></div>
+                        <div class="import-subsection-label">MANUAL INJECTION</div>
+                        <div class="manual-fault-row">
+                            <input type="number" class="input-field input-small" id="input-fault-x" min="0" value="0" placeholder="X" title="Grid X coordinate">
+                            <input type="number" class="input-field input-small" id="input-fault-y" min="0" value="0" placeholder="Y" title="Grid Y coordinate">
+                        </div>
+                        <div class="manual-fault-row" style="margin-top:6px;">
+                            <button class="btn-secondary btn-fault" id="btn-place-obstacle" title="Place permanent obstacle at (X,Y)">WALL</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Visualization -->
+            <section>
+                <h3 class="panel-section-title section-toggle" role="button" tabindex="0" aria-expanded="false" data-target="vis-content">&#x25B8; Visualization</h3>
+                <div class="section-content" id="vis-content">
+                    <div class="panel-divider"></div>
+
+                    <div class="input-group checkbox-group"
+                        title="Toggle heatmap overlay on the grid floor. Choose between real-time density or cumulative traffic below.">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="input-heatmap">
+                            <span>Show heatmap</span>
+                        </label>
+                    </div>
+                    <div id="heatmap-mode-toggle" class="heatmap-mode-group" style="display:none;">
+                        <button id="btn-heatmap-density" class="btn-heatmap-mode active" data-mode="density"
+                            title="Real-time density: where robots currently cluster (decays over ~10 ticks)">Density</button>
+                        <button id="btn-heatmap-traffic" class="btn-heatmap-mode" data-mode="traffic"
+                            title="Cumulative traffic: total visits per cell over the entire run">Traffic</button>
+                        <button id="btn-heatmap-criticality" class="btn-heatmap-mode" data-mode="criticality"
+                            title="Criticality: cells where blocked agents create dependency bottlenecks">Critical</button>
+                    </div>
+                    <div id="density-radius-group" class="input-group" style="display:none;"
+                        title="Spread radius for density calculation (1-3 cells around each agent)">
+                        <label class="input-label" for="input-density-radius">Density radius</label>
+                        <div class="slider-row">
+                            <input type="range" id="input-density-radius" min="1" max="3" value="2" step="1">
+                            <span class="slider-value" id="val-density-radius">2</span>
+                        </div>
+                    </div>
+                    <div class="input-group"
+                        title="Opacity of robot meshes (0.1 = nearly transparent, 1.0 = fully opaque)">
+                        <label class="input-label" for="input-robot-opacity">Robot opacity</label>
+                        <div class="slider-row">
+                            <input type="range" id="input-robot-opacity" min="0.1" max="1.0" value="1.0" step="0.05">
+                            <span class="slider-value" id="val-robot-opacity">1.0</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+
+            <!-- Data Export -->
+            <section>
+                <h3 class="panel-section-title section-toggle" role="button" tabindex="0" aria-expanded="false" data-target="export-content">&#x25B8; Data Export</h3>
+                <div class="section-content" id="export-content">
+                    <div class="panel-divider"></div>
+
+                    <div class="input-group checkbox-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="input-auto-finished">
+                            <span>Auto-export on finish</span>
+                        </label>
+                    </div>
+                    <div class="input-group checkbox-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="input-auto-fault">
+                            <span>Auto-export on fault</span>
+                        </label>
+                    </div>
+
+                    <div class="input-group periodic-row">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="input-periodic">
+                            <span>Periodic</span>
+                        </label>
+                        <input type="number" class="input-field input-small" id="input-periodic-interval" min="1"
+                            max="1000" value="50" disabled>
+                        <span class="input-label">ticks</span>
+                    </div>
+
+                    <div class="format-row">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="input-export-json" checked>
+                            <span>JSON</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="input-export-csv" checked>
+                            <span>CSV</span>
+                        </label>
+                    </div>
+
+                    <button class="btn-secondary" id="btn-export-now" disabled>Export Now</button>
+                </div>
+            </section>
+        </aside>
+
+        <!-- Bevy canvas -->
+        <div id="canvas-container">
+            <canvas id="bevy-canvas"></canvas>
+
+            <!-- Viewport context menu (click-to-select) -->
+            <div id="viewport-context-menu" class="viewport-context-menu hidden">
+                <div class="ctx-menu-header" id="ctx-menu-header">Cell (0, 0)</div>
+                <div class="ctx-menu-divider"></div>
+                <div id="ctx-menu-agent-actions" style="display:none;">
+                    <button class="ctx-menu-item" id="ctx-kill-agent">Kill Agent</button>
+                    <button class="ctx-menu-item" id="ctx-slow-agent">Inject Latency (30 ticks)</button>
+                    <div class="ctx-menu-divider"></div>
+                </div>
+                <button class="ctx-menu-item" id="ctx-place-wall">Place Wall</button>
+            </div>
+
+            <!-- Phase-Driven UI: Verdict Banner (observe + analyze overlay) -->
+            <div id="verdict-banner" class="verdict-banner" data-verdict="running">
+                <div class="verdict-label" id="verdict-label">RUNNING</div>
+                <div class="verdict-dots" id="verdict-dots">
+                    <span class="verdict-dot"></span>
+                    <span class="verdict-dot"></span>
+                    <span class="verdict-dot"></span>
+                    <span class="verdict-dot"></span>
+                    <span class="verdict-dot"></span>
+                </div>
+                <div class="verdict-detail" id="verdict-detail"></div>
+            </div>
+
+            <!-- Phase-Driven UI: Live Stats (observe overlay, top-right) -->
+            <div id="live-stats" class="live-stats">
+                <div class="live-stat-row">
+                    <span class="live-stat-label">Throughput</span>
+                    <span class="live-stat-value" id="live-throughput">&mdash;</span>
+                </div>
+                <div class="live-stat-row">
+                    <span class="live-stat-label">FT</span>
+                    <span class="live-stat-value" id="live-ft">&mdash;</span>
+                </div>
+                <div class="live-stat-row">
+                    <span class="live-stat-label">Faults</span>
+                    <span class="live-stat-value" id="live-faults">&mdash;</span>
+                </div>
+                <div class="live-stat-row">
+                    <span class="live-stat-label">Fleet</span>
+                    <span class="live-stat-value" id="live-fleet">&mdash;</span>
+                </div>
+            </div>
+
+            <!-- Task state color legend — Simple mode (default) -->
+            <div id="state-legend-simple" class="state-legend">
+                <span class="legend-item"><span class="legend-dot" style="background:var(--leg-free)"></span>Free</span>
+                <span class="legend-item"><span class="legend-dot" style="background:var(--leg-travel-empty)"></span>Picking</span>
+                <span class="legend-item"><span class="legend-dot" style="background:var(--leg-travel-to-queue)"></span>Delivering</span>
+                <span class="legend-item"><span class="legend-dot" style="background:rgb(191, 10, 10);box-shadow:0 0 6px rgb(220,30,30)"></span>Dead</span>
+                <span class="legend-item"><span class="legend-dot" style="background:rgb(56,20,107);box-shadow:0 0 4px rgb(80,35,150)"></span>Latency</span>
+            </div>
+            <div id="camera-controls">
+                <button class="btn-camera" id="btn-view-center" title="Center on grid (key: C)">FOCUS</button>
+                <button class="btn-camera" id="btn-view-top" title="Top view (key: 2)">TOP</button>
+            </div>
+
+            <!-- 2D/3D view toggle (bottom-right of canvas) -->
+            <button class="btn-camera btn-view-mode-canvas" id="btn-view-mode" title="Toggle 2D / 3D view (only when idle)">3D</button>
+            <!-- Phase-Driven UI: Visualization Toolbar (observe overlay, bottom-left) -->
+            <div id="viz-toolbar" class="viz-toolbar">
+                <label class="viz-toolbar-toggle" id="viz-heatmap-toggle">
+                    <input type="checkbox" id="viz-heatmap-cb">
+                    <span>HEATMAP</span>
+                </label>
+                <div class="viz-toolbar-sep"></div>
+                <div class="viz-toolbar-modes">
+                    <button class="viz-mode-btn active" id="viz-mode-d" title="Density">D</button>
+                    <button class="viz-mode-btn" id="viz-mode-t" title="Traffic">T</button>
+                    <button class="viz-mode-btn" id="viz-mode-c" title="Critical">C</button>
+                </div>
+                <div class="viz-toolbar-sep"></div>
+                <div class="viz-toolbar-control" id="viz-radius-group">
+                    <span class="viz-toolbar-label">Radius</span>
+                    <input type="range" id="viz-radius" min="1" max="3" value="2" step="1">
+                </div>
+                <div class="viz-toolbar-sep"></div>
+                <div class="viz-toolbar-control">
+                    <span class="viz-toolbar-label">Opacity</span>
+                    <input type="range" id="viz-opacity" min="0" max="1" value="1" step="0.05">
+                </div>
+            </div>
+
+            <div id="loading-overlay" class="loading-overlay hidden">
+                <div class="loading-content">
+                    <div class="loading-phase" id="loading-phase">PREPARING</div>
+                    <div class="loading-bar-track">
+                        <div class="loading-bar-fill" id="loading-bar-fill"></div>
+                    </div>
+                    <div class="loading-percent" id="loading-percent">0%</div>
+                    <div class="loading-message" id="loading-message"></div>
+                </div>
+            </div>
+
+            <!-- Demo overlay captions (bottom-center of canvas) -->
+            <div id="demo-overlay" class="demo-overlay"></div>
+        </div>
+
+        <!-- Right panel -->
+        <aside id="panel-right" class="panel">
+            <!-- Status -->
+            <section>
+                <h3 class="panel-section-title section-toggle" role="button" tabindex="0" aria-expanded="false" data-target="status-content">&#x25B8; Status</h3>
+                <div class="section-content" id="status-content">
+                    <div class="panel-divider"></div>
+
+                    <div class="metric-card">
+                        <div class="metric-value" id="status-state" data-state="idle">IDLE</div>
+                        <div class="metric-label">State</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="status-tick">0</div>
+                        <div class="metric-label">Tick</div>
+                    </div>
+                    <!-- Stacked task-leg bar -->
+                    <div id="task-leg-bar-row" class="fleet-bar-row" style="display:none;">
+                        <span class="fleet-bar-total" id="task-leg-total">0</span>
+                        <div class="fleet-bar-track">
+                            <div class="task-bar-delivering" id="task-bar-delivering" title="Delivering">
+                                <span class="fleet-bar-label" id="task-bar-delivering-label"></span>
+                            </div>
+                            <div class="task-bar-loading" id="task-bar-loading" title="Loading">
+                                <span class="fleet-bar-label" id="task-bar-loading-label"></span>
+                            </div>
+                            <div class="task-bar-idle" id="task-bar-idle" title="Idle">
+                                <span class="fleet-bar-label" id="task-bar-idle-label"></span>
+                            </div>
+                            <div class="task-bar-dead" id="task-bar-dead-seg" title="Dead">
+                                <span class="fleet-bar-label" id="task-bar-dead-label"></span>
+                            </div>
+                        </div>
+                        <div class="fleet-bar-legend">
+                            <span class="fleet-legend-item"><span class="fleet-dot" style="background:var(--state-moving)"></span>Delivering</span>
+                            <span class="fleet-legend-item"><span class="fleet-dot" style="background:var(--state-delayed)"></span>Loading</span>
+                            <span class="fleet-legend-item"><span class="fleet-dot" style="background:var(--state-idle)"></span>Idle</span>
+                            <span class="fleet-legend-item"><span class="fleet-dot" style="background:var(--state-fault)"></span>Dead</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Agents -->
+            <section>
+                <h3 class="panel-section-title section-toggle" role="button" tabindex="0" aria-expanded="false" data-target="agents-content">&#x25B8; Agents</h3>
+                <div class="section-content" id="agents-content">
+                    <div class="panel-divider"></div>
+                    <div id="agent-list"></div>
+                    <!-- Agent detail popover -->
+                    <div id="agent-popover" class="agent-popover hidden">
+                        <div class="agent-popover-header">
+                            <span class="agent-popover-title" id="popover-title">Agent 0</span>
+                            <button class="agent-popover-close" id="popover-close">&times;</button>
+                        </div>
+                        <div class="agent-popover-body">
+                            <div class="popover-row"><span class="popover-key">Position</span><span class="popover-val"
+                                    id="popover-pos">—</span></div>
+                            <div class="popover-row"><span class="popover-key">Goal</span><span class="popover-val"
+                                    id="popover-goal">—</span></div>
+                            <div class="popover-row"><span class="popover-key">Health</span><span class="popover-val"
+                                    id="popover-status">—</span></div>
+                            <div class="popover-row"><span class="popover-key">Task</span><span class="popover-val"
+                                    id="popover-task-leg">—</span></div>
+                            <div class="popover-row" id="popover-heat-row">
+                                <span class="popover-key">Heat</span>
+                                <div class="popover-heat-wrap">
+                                    <div class="popover-heat-bar">
+                                        <div class="popover-heat-fill" id="popover-heat-fill"></div>
+                                    </div>
+                                    <span class="popover-val" id="popover-heat">0.0</span>
+                                </div>
+                            </div>
+                            <div class="popover-row" id="popover-idle-row"><span class="popover-key">Idle
+                                    ratio</span><span class="popover-val" id="popover-idle">0%</span></div>
+                            <div class="popover-row"><span class="popover-key">Dist. to goal</span><span
+                                    class="popover-val" id="popover-path">0</span></div>
+                            <div class="popover-row" id="popover-latency-row" style="display:none;">
+                                <span class="popover-key">Latency</span>
+                                <span class="popover-val popover-latency-tag" id="popover-latency">SLOWED</span>
+                            </div>
+                            <div class="popover-actions">
+                                <button id="btn-kill-agent" class="btn-kill"
+                                    title="Manually kill this agent (adversarial mode)">KILL</button>
+                                <button id="btn-slow-agent" class="btn-slow"
+                                    title="Inject latency — force Wait for 20 ticks">SLOW</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Resilience Scorecard (with color zones) -->
+            <section id="scorecard-section" style="display:none;">
+                <h3 class="panel-section-title section-toggle" role="button" tabindex="0" aria-expanded="false" data-target="scorecard-content">&#x25B8; Resilience Scorecard</h3>
+                <div class="section-content" id="scorecard-content">
+                    <div class="panel-divider"></div>
+                    <div class="sc-card" title="FT = P_fault / P_nominal — fraction of baseline throughput retained (Milner 2023). Higher = more resilient.">
+                        <div class="sc-card-header"><span class="sc-card-label">Fault Tolerance</span><span class="sc-card-zone" id="sc-ft-zone">&mdash;</span></div>
+                        <div class="sc-card-value" id="sc-ft">1.00</div>
+                        <div class="sc-card-bar"><div class="sc-bar-zone sc-bar-poor" style="width:40%"></div><div class="sc-bar-zone sc-bar-low" style="width:20%"></div><div class="sc-bar-zone sc-bar-fair" style="width:20%"></div><div class="sc-bar-zone sc-bar-good" style="width:20%"></div><div class="sc-bar-marker" id="sc-ft-marker"></div></div>
+                    </div>
+                    <div class="sc-card" id="sc-nrr-card" title="NRR = 1 - MTTR/MTBF — Normalized Recovery Ratio (Or 2025). Higher = less time recovering." style="display:none">
+                        <div class="sc-card-header"><span class="sc-card-label">NRR</span><span class="sc-card-zone" id="sc-nrr-zone">&mdash;</span></div>
+                        <div class="sc-card-value" id="sc-nrr">&mdash;</div>
+                        <div class="sc-card-bar"><div class="sc-bar-zone sc-bar-poor" style="width:30%"></div><div class="sc-bar-zone sc-bar-low" style="width:20%"></div><div class="sc-bar-zone sc-bar-fair" style="width:20%"></div><div class="sc-bar-zone sc-bar-good" style="width:30%"></div><div class="sc-bar-marker" id="sc-nrr-marker"></div></div>
+                    </div>
+                    <div class="sc-card" title="Survival Rate: alive agents / initial fleet. Higher = fewer deaths.">
+                        <div class="sc-card-header"><span class="sc-card-label">Survival Rate</span><span class="sc-card-zone" id="sc-survival-rate-zone">&mdash;</span></div>
+                        <div class="sc-card-value" id="sc-survival-rate">1.00</div>
+                        <div class="sc-card-bar"><div class="sc-bar-zone sc-bar-poor" style="width:20%"></div><div class="sc-bar-zone sc-bar-low" style="width:20%"></div><div class="sc-bar-zone sc-bar-fair" style="width:20%"></div><div class="sc-bar-zone sc-bar-good" style="width:40%"></div><div class="sc-bar-marker" id="sc-survival-rate-marker"></div></div>
+                    </div>
+                    <div class="sc-card" title="Fraction of post-fault ticks below 50% baseline throughput. Lower = better.">
+                        <div class="sc-card-header"><span class="sc-card-label">Critical Time</span><span class="sc-card-zone" id="sc-crit-zone">&mdash;</span></div>
+                        <div class="sc-card-value" id="sc-crit">0.00</div>
+                        <div class="sc-card-bar"><div class="sc-bar-zone sc-bar-good" style="width:10%"></div><div class="sc-bar-zone sc-bar-fair" style="width:10%"></div><div class="sc-bar-zone sc-bar-low" style="width:20%"></div><div class="sc-bar-zone sc-bar-poor" style="width:60%"></div><div class="sc-bar-marker" id="sc-crit-marker"></div></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═══ System Performance (always visible) ═══ -->
+            <section id="system-perf-section">
+                <h3 class="panel-section-title section-toggle" role="button" tabindex="0" aria-expanded="false" data-target="system-perf-content">&#x25B8; System Performance</h3>
+                <div class="section-content" id="system-perf-content">
+                    <div class="panel-divider"></div>
+
+                    <!-- Charts with inline legends -->
+                    <div class="chart-container" id="chart-throughput">
+                        <div class="chart-legend"><span style="color:rgba(143,58,222,0.3)">━━</span> Per-Tick &nbsp; <span style="color:rgb(143,58,222)">━━</span> MVA</div>
+                    </div>
+                    <div class="chart-container" id="chart-tasks">
+                        <div class="chart-legend"><span style="color:rgb(45,160,0)">━━</span> Tasks</div>
+                    </div>
+                    <!-- Idle ratio chart removed from live view (kept in Results) -->
+
+                    <!-- Metric cards -->
+                    <div class="ctx-metric" data-metric="throughput" title="Goals completed per tick (moving average). Compares live run against the fault-free baseline. Drop = fault impact, recovery = system resilience.">
+                        <div class="ctx-metric-header">
+                            <span class="ctx-metric-label">Throughput (Moving Avg)</span>
+                            <span class="ctx-metric-delta" id="delta-throughput"></span>
+                        </div>
+                        <div class="ctx-metric-value" id="metric-throughput">0.00</div>
+                        <div class="ctx-metric-bar"><div class="ctx-metric-fill" id="bar-throughput"></div><div class="ctx-metric-ghost" id="ghost-throughput"></div></div>
+                        <div class="ctx-metric-baseline" id="baseline-throughput"></div>
+                    </div>
+
+                    <div class="ctx-metric" data-metric="tasks_completed" title="Total pickup-to-delivery tasks completed. Gap between live and baseline = cumulative impact of faults on productivity.">
+                        <div class="ctx-metric-header">
+                            <span class="ctx-metric-label">Tasks Completed</span>
+                            <span class="ctx-metric-delta" id="delta-tasks_completed"></span>
+                        </div>
+                        <div class="ctx-metric-value" id="metric-tasks-completed">0</div>
+                        <div class="ctx-metric-bar"><div class="ctx-metric-fill" id="bar-tasks_completed"></div><div class="ctx-metric-ghost" id="ghost-tasks_completed"></div></div>
+                        <div class="ctx-metric-baseline" id="baseline-tasks_completed"></div>
+                    </div>
+
+                    <div class="ctx-metric" data-metric="idle_ratio" title="Fraction of actions where alive agents wait instead of moving. High = congestion or blockage. Spikes after faults indicate cascading delays.">
+                        <div class="ctx-metric-header">
+                            <span class="ctx-metric-label">Wait Ratio</span>
+                            <span class="ctx-metric-delta" id="delta-idle_ratio"></span>
+                        </div>
+                        <div class="ctx-metric-value" id="metric-idle-ratio">0.00</div>
+                        <div class="ctx-metric-bar"><div class="ctx-metric-fill" id="bar-idle_ratio"></div><div class="ctx-metric-ghost" id="ghost-idle_ratio"></div></div>
+                        <div class="ctx-metric-baseline" id="baseline-idle_ratio"></div>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- ═══ Fault Response (hidden until faults active) ═══ -->
+            <section id="fault-response-section" class="hidden">
+                <h3 class="panel-section-title section-toggle" role="button" tabindex="0" aria-expanded="false" data-target="fault-response-content">&#x25B8; Fault Response</h3>
+                <div class="section-content" id="fault-response-content">
+                    <!-- Agent status chart removed from live view (kept in Results) -->
+                    <div class="chart-container" id="chart-heat" style="display:none;">
+                        <div class="chart-legend"><span style="color:rgb(230,140,0)">━━</span> Avg Wear</div>
+                    </div>
+                    <!-- Cascade chart removed from live view (kept in Results) -->
+
+                    <!-- Metric cards -->
+                    <div class="ctx-metric" data-metric="fault_count" title="Total fault events">
+                        <div class="ctx-metric-header">
+                            <span class="ctx-metric-label">Faults</span>
+                        </div>
+                        <div class="ctx-metric-value" id="metric-faults">0</div>
+                    </div>
+
+                    <div class="ctx-metric" data-metric="mttr_mtbf" title="MTTR: average ticks to recover throughput after a fault. MTBF: average ticks between fault events. Low MTTR/MTBF ratio = system recovers faster than faults arrive.">
+                        <div class="ctx-metric-header">
+                            <span class="ctx-metric-label">MTTR / MTBF</span>
+                        </div>
+                        <div class="ctx-metric-value"><span id="metric-mttr">0.0</span> / <span id="metric-mtbf">&mdash;</span></div>
+                    </div>
+
+                    <div class="ctx-metric" data-metric="survival_rate" title="Percentage of agents still operational. Drops during burst kills or wear-based breakdowns. Dead agents become permanent obstacles.">
+                        <div class="ctx-metric-header">
+                            <span class="ctx-metric-label">Survival Rate</span>
+                        </div>
+                        <div class="ctx-metric-value" id="metric-survival-rate">100%</div>
+                    </div>
+
+                    <!-- Live fault event list -->
+                    <div id="live-fault-timeline"></div>
+                </div>
+            </section>
+
+            <!-- Fault Timeline -->
+            <section id="fault-events-section" style="display:none;">
+                <h3 class="panel-section-title section-toggle" role="button" tabindex="0" aria-expanded="false" data-target="fault-events-content">&#x25B8; Fault Timeline</h3>
+                <div class="section-content" id="fault-events-content">
+                    <div class="panel-divider"></div>
+                    <div class="ft-summary" id="ft-summary"></div>
+                    <div class="ft-list" id="ft-list"></div>
+                    <div class="ft-empty" id="ft-empty">No fault events yet.</div>
+                    <select id="input-fault-event" style="display:none"><option value="">—</option></select>
+                </div>
+            </section>
+
+            <!-- View Results button -->
+            <div class="view-results-wrapper">
+                <button class="btn-view-results" id="btn-view-results">VIEW RESULTS</button>
+            </div>
+
+            <!-- Results Dashboard (visible only in results phase) -->
+            <div class="results-dashboard" id="results-dashboard">
+                <div class="results-header">
+                    <span class="results-title">Simulation Report</span>
+                    <div class="results-export-btns">
+                        <button id="btn-export-json-results">JSON</button>
+                        <button id="btn-export-csv-results">CSV</button>
+                    </div>
+                </div>
+
+                <!-- Verdict + Scorecard -->
+                <div class="results-verdict-row">
+                    <div class="results-verdict-card">
+                        <div class="results-section-title">Verdict</div>
+                        <div class="results-verdict-label" id="results-verdict-label">&mdash;</div>
+                        <div class="results-verdict-dots" id="results-verdict-dots"></div>
+                    </div>
+                    <div class="results-scorecard-card">
+                        <div class="results-section-title">Resilience Scorecard</div>
+                        <div id="results-scorecard-bars"></div>
+                    </div>
+                </div>
+
+                <!-- Summary Table -->
+                <div class="results-section">
+                    <div class="results-section-title">Summary</div>
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Baseline</th>
+                                <th>Final</th>
+                                <th>Delta</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-summary-body"></tbody>
+                    </table>
+                </div>
+
+                <!-- Charts (2-column grid) -->
+                <div class="results-section">
+                    <div class="results-section-title">Charts</div>
+                    <div class="results-charts-grid">
+                        <div class="results-chart-cell" id="results-chart-throughput"></div>
+                        <div class="results-chart-cell" id="results-chart-tasks"></div>
+                        <div class="results-chart-cell" id="results-chart-heat"></div>
+                        <div class="results-chart-cell" id="results-chart-agents"></div>
+                        <div class="results-chart-cell" id="results-chart-cascade"></div>
+                    </div>
+                </div>
+
+                <!-- Fault Timeline Table -->
+                <div class="results-section results-fault-section">
+                    <div class="results-section-title">Fault Timeline</div>
+                    <div class="results-fault-scroll">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th>Tick</th>
+                                    <th>Type</th>
+                                    <th>Affected</th>
+                                    <th>Depth</th>
+                                    <th>Recovered</th>
+                                </tr>
+                            </thead>
+                            <tbody id="results-fault-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Simulation Config -->
+                <div class="results-section">
+                    <div class="results-section-title">Simulation Config</div>
+                    <dl class="results-config" id="results-config"></dl>
+                </div>
+
+                <!-- Navigation -->
+                <div class="results-nav">
+                    <button id="btn-back-analysis">&larr; Back to Analysis</button>
+                    <button id="btn-new-sim" class="primary">New Simulation</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Experiment Mode — full-page view (hidden unless phase=experiment) -->
+        <div id="experiment-view">
+            <!-- Stage 1: Config -->
+            <div class="exp-stage" id="exp-stage-config">
+                <div class="exp-page">
+                    <div class="exp-page-header">
+                        <h2 class="exp-page-title">Experiment Configuration</h2>
+                        <span class="exp-status" id="exp-status"></span>
+                    </div>
+
+                    <!-- Presets -->
+                    <div class="exp-preset-row">
+                        <button class="exp-preset-btn" data-exp-preset="smoke">SMOKE</button>
+                        <button class="exp-preset-btn" data-exp-preset="solver">SOLVER</button>
+                        <button class="exp-preset-btn" data-exp-preset="scale">SCALE</button>
+                        <button class="exp-preset-btn" data-exp-preset="scheduler">SCHEDULER</button>
+                    </div>
+
+                    <!-- 2-column config grid -->
+                    <div class="exp-config-grid">
+                        <div class="exp-config-left">
+                            <div class="exp-check-group">
+                                <label class="exp-check-label">Solvers</label>
+                                <div class="exp-check-grid" id="exp-solvers">
+                                    <label class="checkbox-label"><input type="checkbox" value="pibt" checked><span>PIBT</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="token_passing"><span>Token Passing</span></label>
+                                </div>
+                            </div>
+                            <div class="exp-check-group">
+                                <label class="exp-check-label">Topologies</label>
+                                <div class="exp-check-grid" id="exp-topologies">
+                                    <!-- Populated dynamically from loadedTopologies -->
+                                </div>
+                                <div class="exp-topo-empty" id="exp-topo-empty" style="display:none">No preset maps. Add maps to <code>web/topologies/</code> or import below.</div>
+                                <div class="exp-import-row">
+                                    <button class="btn-secondary btn-small" id="exp-import-map-btn" title="Import a JSON map file for experiments">+ Import map</button>
+                                    <input type="file" id="exp-import-map-input" accept=".json" multiple style="display:none">
+                                </div>
+                            </div>
+                            <div class="exp-check-group">
+                                <label class="exp-check-label">Schedulers</label>
+                                <div class="exp-check-grid" id="exp-schedulers">
+                                    <label class="checkbox-label"><input type="checkbox" value="random" checked><span>Random</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="closest"><span>Closest</span></label>
+                                </div>
+                            </div>
+                            <div class="exp-check-group">
+                                <label class="exp-check-label">Fault Scenarios</label>
+                                <div class="exp-check-grid" id="exp-scenarios">
+                                    <label class="checkbox-label"><input type="checkbox" value="none" checked><span>None (baseline)</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="burst_20" checked><span>Burst 20%</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="burst_50"><span>Burst 50%</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="wear_low"><span>Wear Low</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="wear_medium" checked><span>Wear Medium</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="wear_high"><span>Wear High</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="zone" checked><span>Spatial Zone Outage</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="intermittent"><span>Intermittent <span class="exp-scenario-hint">(MTBF 80, start 80)</span></span></label>
+                                </div>
+                                <!-- Custom scenario builder -->
+                                <div class="exp-custom-scenario" id="exp-custom-scenario">
+                                    <div class="exp-custom-header">
+                                        <span class="exp-check-label">Custom Scenarios</span>
+                                        <button class="btn-secondary btn-small" id="btn-add-custom-scenario">+ Add</button>
+                                    </div>
+                                    <div id="exp-custom-list"></div>
+                                    <div class="exp-custom-form" id="exp-custom-form" style="display:none">
+                                        <select class="input-field" id="exp-custom-type">
+                                            <option value="burst">Burst Failure</option>
+                                            <option value="wear">Wear-Based</option>
+                                            <option value="zone">Spatial Zone Outage</option>
+                                            <option value="intermittent">Intermittent</option>
+                                        </select>
+                                        <div class="exp-custom-params" id="exp-custom-params-burst">
+                                            <label>Kill %<input type="number" class="input-field input-narrow" id="exp-custom-burst-pct" value="30" min="1" max="100"></label>
+                                            <label>At tick<input type="number" class="input-field input-narrow" id="exp-custom-burst-tick" value="100" min="1" max="5000"></label>
+                                        </div>
+                                        <div class="exp-custom-params" id="exp-custom-params-wear" style="display:none">
+                                            <label>Beta<input type="number" class="input-field input-narrow" id="exp-custom-wear-beta" value="2.5" min="0.5" max="10" step="0.1"></label>
+                                            <label>Eta<input type="number" class="input-field input-narrow" id="exp-custom-wear-eta" value="500" min="50" max="5000"></label>
+                                            <label>Threshold<input type="number" class="input-field input-narrow" id="exp-custom-wear-thresh" value="80" min="10" max="100"></label>
+                                        </div>
+                                        <div class="exp-custom-params" id="exp-custom-params-zone" style="display:none">
+                                            <label>At tick<input type="number" class="input-field input-narrow" id="exp-custom-zone-tick" value="100" min="1" max="5000"></label>
+                                            <label>Duration<input type="number" class="input-field input-narrow" id="exp-custom-zone-dur" value="50" min="1" max="1000"></label>
+                                        </div>
+                                        <div class="exp-custom-params" id="exp-custom-params-intermittent" style="display:none">
+                                            <label>MTBF<input type="number" class="input-field input-narrow" id="exp-custom-int-mtbf" value="80" min="5" max="1000"></label>
+                                            <label>Recovery<input type="number" class="input-field input-narrow" id="exp-custom-int-recovery" value="15" min="1" max="200"></label>
+                                            <label>Start tick<input type="number" class="input-field input-narrow" id="exp-custom-int-start" value="80" min="0" max="5000"></label>
+                                        </div>
+                                        <div class="exp-custom-actions">
+                                            <button class="btn-primary btn-small" id="btn-save-custom-scenario">ADD TO MATRIX</button>
+                                            <button class="btn-secondary btn-small" id="btn-cancel-custom-scenario">CANCEL</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="exp-config-right">
+                            <div class="exp-input-group">
+                                <label class="exp-check-label" for="exp-agents">Agents</label>
+                                <input type="text" class="input-field" id="exp-agents" value="20, 40" placeholder="e.g. 10, 20, 40, 80">
+                            </div>
+                            <div class="exp-input-group">
+                                <label class="exp-check-label" for="exp-seeds">Seeds</label>
+                                <input type="text" class="input-field" id="exp-seeds" value="42, 123, 456" placeholder="e.g. 42, 123, 456">
+                            </div>
+                            <div class="exp-input-group">
+                                <label class="exp-check-label" for="exp-ticks">Ticks per run</label>
+                                <input type="number" class="input-field" id="exp-ticks" value="500" min="50" max="5000">
+                            </div>
+
+                            <div class="exp-matrix-summary" id="exp-matrix-summary"></div>
+
+                            <div class="exp-run-count-display" id="exp-run-count-display">0 runs</div>
+
+                            <div class="exp-action-row">
+                                <button class="btn-primary exp-run-btn" id="btn-exp-run">RUN EXPERIMENT</button>
+                                <label class="btn-secondary exp-import-btn" id="label-import-experiment">
+                                    IMPORT
+                                    <input type="file" id="input-import-experiment" accept=".json" class="file-input-hidden">
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stage 2: Running -->
+            <div class="exp-stage" id="exp-stage-running">
+                <div class="exp-progress-card">
+                    <div class="exp-progress-fraction" id="exp-progress-fraction">0 / 0</div>
+                    <div class="exp-progress-pct" id="exp-progress-pct">0%</div>
+                    <div class="exp-progress-track">
+                        <div class="exp-progress-fill" id="exp-progress-fill"></div>
+                    </div>
+
+                    <!-- Padlock matrix display -->
+                    <div class="padlock">
+                        <div class="padlock-headers" id="padlock-headers"></div>
+                        <div class="padlock-viewport" id="padlock-viewport"></div>
+                    </div>
+
+                    <div class="exp-progress-time" id="exp-progress-time"></div>
+                    <button class="btn-secondary exp-cancel-btn" id="btn-exp-cancel">CANCEL</button>
+                </div>
+            </div>
+
+            <!-- Stage 3: Results -->
+            <div class="exp-stage" id="exp-stage-results">
+                <div class="exp-results-page">
+                    <!-- Toolbar strip -->
+                    <div class="exp-results-toolbar">
+                        <div class="exp-results-toolbar-left">
+                            <h2 class="exp-results-title">Results</h2>
+                            <span class="exp-results-summary" id="exp-results-summary"></span>
+                        </div>
+                        <div class="exp-results-toolbar-right">
+                            <div class="exp-toolbar-group">
+                                <label class="exp-toolbar-label">Export</label>
+                                <button class="exp-toolbar-btn" id="btn-exp-csv">CSV</button>
+                                <button class="exp-toolbar-btn" id="btn-exp-json">JSON</button>
+                                <button class="exp-toolbar-btn" id="btn-exp-latex">LaTeX</button>
+                                <button class="exp-toolbar-btn" id="btn-exp-typst">Typst</button>
+                            </div>
+                            <div class="exp-toolbar-divider"></div>
+                            <button class="exp-toolbar-btn exp-toolbar-btn-new" id="btn-exp-new">NEW</button>
+                        </div>
+                    </div>
+
+                    <!-- Body: table + chart side by side -->
+                    <div class="exp-results-body">
+                        <div class="exp-results-table-wrap">
+                            <table class="exp-table" id="exp-table">
+                                <thead id="exp-thead"></thead>
+                                <tbody id="exp-tbody"></tbody>
+                            </table>
+                        </div>
+                        <div class="exp-results-sidebar">
+                            <div class="exp-sidebar-toolbar">
+                                <select class="exp-toolbar-select" id="exp-chart-metric">
+                                    <option value="fault_tolerance" selected>Fault Tolerance</option>
+                                    <option value="critical_time">Critical Time</option>
+                                    <option value="itae">ITAE</option>
+                                    <option value="attack_rate">Attack Rate</option>
+                                    <option value="cascade_depth">Cascade Depth</option>
+                                    <option value="rapidity">Rapidity</option>
+                                    <option value="throughput">Throughput</option>
+                                    <option value="survival_rate">Survival Rate</option>
+                                </select>
+                            </div>
+                            <div class="exp-chart-container" id="exp-chart"></div>
+                        </div>
+                    </div>
+
+                    <!-- Drill-down card (hidden by default) -->
+                    <div class="exp-drilldown" id="exp-drilldown" style="display:none;">
+                        <div class="exp-drilldown-header">
+                            <span class="exp-drilldown-title" id="exp-drilldown-title"></span>
+                            <button class="exp-drilldown-close" id="btn-exp-drilldown-close">&times;</button>
+                        </div>
+                        <div class="exp-drilldown-body" id="exp-drilldown-body"></div>
+                        <div class="exp-drilldown-footer">
+                            <button class="btn-primary exp-sim3d-btn" id="btn-exp-sim3d">SIMULATE IN OBSERVATORY</button>
+                            <span class="exp-seed-label" id="exp-drilldown-seed-label"></span>
+                            <select class="exp-seed-select" id="exp-drilldown-seed-select" style="display:none"></select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom toolbar -->
+    <footer id="toolbar">
+        <div class="toolbar-controls">
+            <button class="btn-primary" id="btn-start" title="Space">START <kbd class="key-space">␣</kbd></button>
+            <button class="btn-secondary" id="btn-pause" disabled title="Space">PAUSE <kbd
+                    class="key-space">␣</kbd></button>
+            <button class="btn-secondary" id="btn-step" disabled title="N">STEP <kbd>N</kbd></button>
+            <button class="btn-secondary" id="btn-reset" disabled title="R">RESET <kbd>R</kbd></button>
+        </div>
+        <!-- Unified timeline bar (replaces sim-tick) -->
+        <div class="timeline-bar" id="timeline-bar">
+            <span class="timeline-tick-label" id="timeline-tick-label">0 / 0</span>
+            <div class="timeline-track" id="timeline-track">
+                <div class="timeline-buffer" id="timeline-buffer"></div>
+                <div class="timeline-progress" id="timeline-progress"></div>
+                <div class="timeline-playhead" id="timeline-playhead"></div>
+            </div>
+        </div>
+        <div class="toolbar-speed">
+            <label class="input-label" for="input-tick-hz">Speed</label>
+            <input type="range" id="input-tick-hz" min="1" max="30" value="10" step="0.5">
+            <span class="slider-value" id="val-tick-hz">10</span>
+            <span class="input-label">Hz</span>
+        </div>
+        <!-- Fault marker hover popup -->
+        <div class="timeline-popup" id="timeline-popup" style="display:none;"></div>
+    </footer>
+
+    <!-- Graphics Settings Modal -->
+    <div id="settings-overlay" class="settings-overlay hidden">
+        <div class="settings-modal">
+            <div class="settings-header">
+                <span class="settings-title">GRAPHICS SETTINGS</span>
+                <button class="settings-close" id="settings-close">&times;</button>
+            </div>
+            <div class="settings-body">
+                <!-- Left: controls -->
+                <div class="settings-controls">
+                    <div class="settings-presets">
+                        <button class="btn-preset" id="preset-low" data-preset="low">LOW</button>
+                        <button class="btn-preset active" id="preset-medium" data-preset="medium">MEDIUM</button>
+                        <button class="btn-preset" id="preset-high" data-preset="high">HIGH</button>
+                    </div>
+                    <div class="settings-divider"></div>
+
+                    <div class="settings-row">
+                        <label class="settings-label">Shadows</label>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="setting-shadows">
+                            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                        </label>
+                    </div>
+
+                    <div class="settings-row">
+                        <label class="settings-label">Antialiasing (MSAA)</label>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="setting-msaa" checked>
+                            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                        </label>
+                    </div>
+
+                    <div class="settings-row">
+                        <label class="settings-label">Colorblind mode</label>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="setting-colorblind">
+                            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                        </label>
+                    </div>
+
+                    <div class="settings-divider"></div>
+                    <div class="settings-row">
+                        <label class="settings-label">Keyboard layout</label>
+                        <select class="input-select settings-select" id="setting-keyboard">
+                            <option value="qwerty">QWERTY</option>
+                            <option value="azerty">AZERTY</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Right: CSS 3D robot preview -->
+                <div class="settings-preview">
+                    <div class="robot-scene" id="robot-scene">
+                        <div class="robot-plane"></div>
+                        <div class="robot-model" id="robot-model">
+                            <!-- Base -->
+                            <div class="robot-base"></div>
+                            <!-- Top plate -->
+                            <div class="robot-top"></div>
+                            <!-- Dome -->
+                            <div class="robot-dome"></div>
+                            <!-- Indicator light -->
+                            <div class="robot-indicator"></div>
+                            <!-- Wheels -->
+                            <div class="robot-wheel robot-wheel-fl"></div>
+                            <div class="robot-wheel robot-wheel-fr"></div>
+                            <div class="robot-wheel robot-wheel-bl"></div>
+                            <div class="robot-wheel robot-wheel-br"></div>
+                            <!-- Stripe -->
+                            <div class="robot-stripe"></div>
+                        </div>
+                    </div>
+                    <div class="preview-label">PREVIEW</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Performance warning modal -->
+    <div id="perf-warning-overlay" class="settings-overlay hidden">
+        <div class="settings-modal" style="width:560px">
+            <div class="settings-header">
+                <span class="settings-title">PERFORMANCE ADVISORY</span>
+                <button class="settings-close" id="perf-warning-close">&times;</button>
+            </div>
+            <div class="perf-warning-body">
+                <p class="perf-warning-summary">
+                    You are about to run <strong id="perf-warn-agents">—</strong> agents on a
+                    <strong id="perf-warn-grid">—</strong> grid in the browser (WASM / WebGL2).
+                    This configuration exceeds recommended limits for smooth real-time rendering.
+                </p>
+
+                <table class="perf-warning-table">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>WASM (browser)</th>
+                            <th>Desktop (native)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Expected FPS</td>
+                            <td id="perf-warn-wasm-fps">—</td>
+                            <td id="perf-warn-native-fps">—</td>
+                        </tr>
+                        <tr>
+                            <td>Threading</td>
+                            <td>Single-threaded</td>
+                            <td>Multi-threaded</td>
+                        </tr>
+                        <tr>
+                            <td>GPU backend</td>
+                            <td>WebGL2</td>
+                            <td>Vulkan / Metal</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="perf-warning-columns">
+                    <div>
+                        <h4 class="perf-warning-heading perf-heading-con">WASM LIMITATIONS</h4>
+                        <ul class="perf-warning-list">
+                            <li>Single-threaded execution</li>
+                            <li>No SIMD vectorization</li>
+                            <li>WebGL2 texture upload overhead</li>
+                            <li>JS&harr;WASM bridge serialization</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="perf-warning-heading perf-heading-pro">DESKTOP ADVANTAGES</h4>
+                        <ul class="perf-warning-list">
+                            <li>Native multi-threading</li>
+                            <li>Vulkan/Metal GPU access</li>
+                            <li>Direct memory, no bridge</li>
+                            <li>SIMD + full CPU features</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="perf-warning-recommend">
+                    <strong>Recommended for browser:</strong> &le; 200 agents on &le; 128&times;128 grid
+                </div>
+
+                <div class="perf-warning-actions">
+                    <label class="perf-warning-dismiss">
+                        <input type="checkbox" id="perf-warn-dismiss-check">
+                        Don't remind me again
+                    </label>
+                    <div class="perf-warning-buttons">
+                        <button class="btn-secondary" id="perf-warn-adjust">ADJUST</button>
+                        <button class="btn-primary" id="perf-warn-start">START ANYWAY</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import init from './mafis.js';
+        import { initApp } from './app.js';
+
+        async function start() {
+            try {
+                await init();
+                initApp();
+            } catch (e) {
+                const msg = String(e.message || e);
+                if (msg.includes('getContext') || msg.includes('webgl') || msg.includes('CreateSurface')) {
+                    showGpuError();
+                } else {
+                    showGpuError(msg);
+                }
+            }
+        }
+
+        function showGpuError(detail) {
+            const container = document.getElementById('canvas-container');
+            if (!container) return;
+            const overlay = document.createElement('div');
+            overlay.id = 'gpu-error-overlay';
+            overlay.innerHTML = `
+                <div class="gpu-error-box">
+                    <div class="gpu-error-icon">&#9888;</div>
+                    <h2>WebGL2 Unavailable</h2>
+                    <p>The 3D renderer could not start because the browser blocked the graphics context.</p>
+                    <div class="gpu-error-steps">
+                        <p><strong>If you are using Arc Browser:</strong></p>
+                        <ol>
+                            <li>Open <strong>Site Settings</strong> for this page (click the lock icon in the URL bar)</li>
+                            <li>Turn off <strong>Boost</strong> for this site</li>
+                            <li>Reload the page</li>
+                        </ol>
+                        <p><strong>Other browsers:</strong></p>
+                        <ul>
+                            <li>Make sure hardware acceleration is enabled in your browser settings</li>
+                            <li>Try disabling browser extensions that modify page rendering</li>
+                            <li>Update your graphics drivers</li>
+                        </ul>
+                    </div>
+                    ${detail ? `<details class="gpu-error-detail"><summary>Error detail</summary><pre></pre></details>` : ''}
+                </div>
+            `;
+            // Safely set error detail text (avoid innerHTML XSS)
+            const pre = overlay.querySelector('.gpu-error-detail pre');
+            if (pre && detail) pre.textContent = detail;
+            container.appendChild(overlay);
+        }
+
+        start();
+    </script>
+
+    <!-- Metrics reference modal -->
+    <div id="metrics-info-modal" class="metrics-modal-overlay" style="display:none">
+        <div class="metrics-modal-content">
+            <button class="metrics-modal-close" id="btn-metrics-close">&times;</button>
+            <h2>Fault Metrics Reference</h2>
+
+            <!-- ── SECTION 1: Primary differential metrics ── -->
+            <h3>Differential Metrics (Experiment)</h3>
+            <p class="composite-note">MAFIS computes six differential metrics by comparing each faulted run against its paired fault-free baseline. Rooted in resilience engineering (Bruneau 2003), control theory (Ogata 2010), and epidemiology (Wallinga &amp; Lipsitch 2007).</p>
+            <table class="metrics-ref-table metrics-ref-formula">
+                <thead><tr><th>Metric</th><th>Formula</th><th>Range</th><th>Description</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td>Fault Tolerance (FT)</td>
+                        <td><span class="formula">P<sub>faulted</sub>&thinsp;/&thinsp;P<sub>baseline</sub></span></td>
+                        <td>0&thinsp;&ndash;&thinsp;1+</td>
+                        <td>Throughput retention ratio. FT &lt; 1 = degradation. FT &gt; 1 = paradoxical gain (Braess: fault relieves congestion).</td>
+                    </tr>
+                    <tr>
+                        <td>Critical Time (CT)</td>
+                        <td><span class="formula">ticks<sub>&lt;50%</sub>&thinsp;/&thinsp;ticks<sub>post-fault</sub></span></td>
+                        <td>0&thinsp;&ndash;&thinsp;1</td>
+                        <td>Fraction of post-fault ticks where throughput falls below 50% of baseline. Lower = better.</td>
+                    </tr>
+                    <tr>
+                        <td>ITAE</td>
+                        <td><span class="formula">&Sigma;&thinsp;(t &minus; t<sub>f</sub>)&thinsp;&middot;&thinsp;|1 &minus; R(t)|</span></td>
+                        <td>0&thinsp;&ndash;&thinsp;&infin;</td>
+                        <td>Integral of Time-weighted Absolute Error of the throughput ratio post-fault (Ogata 2010). Penalizes sustained degradation more heavily than early transients. Lower = better. N/A when no fault occurs.</td>
+                    </tr>
+                    <tr>
+                        <td>Attack Rate (AR)</td>
+                        <td><span class="formula">ever<sub>affected</sub>&thinsp;/&thinsp;initial<sub>fleet</sub></span></td>
+                        <td>0&thinsp;&ndash;&thinsp;1</td>
+                        <td>Fleet-exposure fraction — proportion of agents either directly killed or transitively reached by fault cascade BFS at any point in the run (Wallinga &amp; Lipsitch 2007). Higher = more widespread impact.</td>
+                    </tr>
+                    <tr>
+                        <td>Cascade Depth</td>
+                        <td><span class="formula">mean BFS depth<sub>per event</sub></span></td>
+                        <td>0&thinsp;&ndash;&thinsp;10</td>
+                        <td>Mean BFS depth on the Action Dependency Graph across fault events. Measures how far disruption propagates through agent dependencies. Capped at MAX_CASCADE_DEPTH = 10.</td>
+                    </tr>
+                    <tr>
+                        <td>Rapidity</td>
+                        <td><span class="formula">T<sub>rec</sub>(&rho; = 0.9)</span></td>
+                        <td>ticks</td>
+                        <td>Ticks from first fault until throughput recovers to &ge;90% of baseline for 5 consecutive ticks (Bruneau 2003). Only applicable to recoverable faults (ZoneOutage, IntermittentFault). N/A for permanent faults. Lower = faster recovery.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- ── SECTION 2: Live observatory scorecard ── -->
+            <h3>Live Observatory Metrics</h3>
+            <p class="composite-note">Displayed in real-time during simulation. Computed from the live run only — no baseline pairing. Shown in the scorecard panel and header bars.</p>
+            <table class="metrics-ref-table metrics-ref-formula">
+                <thead><tr><th>Metric</th><th>Formula</th><th>Range</th><th>Description</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td>Fault Tolerance</td>
+                        <td><span class="formula">P<sub>fault</sub>&thinsp;/&thinsp;P<sub>nominal</sub></span></td>
+                        <td>0&thinsp;&ndash;&thinsp;1+</td>
+                        <td>Fraction of baseline throughput retained under faults. Can exceed 1.0 (Braess paradox).</td>
+                    </tr>
+                    <tr>
+                        <td>NRR</td>
+                        <td><span class="formula">1 &minus; MTTR&thinsp;/&thinsp;MTBF</span></td>
+                        <td>0&thinsp;&ndash;&thinsp;1</td>
+                        <td>Normalized Recovery Ratio. Higher = less time spent recovering. Requires &ge;2 fault events and at least one cascade-affected neighbor.</td>
+                    </tr>
+                    <tr>
+                        <td>Fleet Utilization</td>
+                        <td><span class="formula">alive<sub>tasked</sub>&thinsp;/&thinsp;initial<sub>fleet</sub></span></td>
+                        <td>0&thinsp;&ndash;&thinsp;1</td>
+                        <td>Productive fleet capacity retained. Counts latency-affected agents as tasked.</td>
+                    </tr>
+                    <tr>
+                        <td>Critical Time</td>
+                        <td><span class="formula">ticks<sub>&lt;50%</sub>&thinsp;/&thinsp;ticks<sub>post-fault</sub></span></td>
+                        <td>0&thinsp;&ndash;&thinsp;1</td>
+                        <td>Fraction of post-fault ticks below 50% baseline throughput. Lower is better.</td>
+                    </tr>
+                </tbody>
+            </table>
+            <h3>Composite Score</h3>
+            <div class="composite-formula">
+                <span class="formula-term"><span class="formula-var">FT</span>&thinsp;&times;&thinsp;0.3</span>
+                <span class="formula-op">+</span>
+                <span class="formula-term"><span class="formula-var">NRR</span>&thinsp;&times;&thinsp;0.25</span>
+                <span class="formula-op">+</span>
+                <span class="formula-term"><span class="formula-var">FUR</span>&thinsp;&times;&thinsp;0.25</span>
+                <span class="formula-op">+</span>
+                <span class="formula-term">(1 &minus; <span class="formula-var">CritTime</span>)&thinsp;&times;&thinsp;0.2</span>
+            </div>
+            <p class="composite-note">When NRR is N/A, weights redistribute: FT&thinsp;40%, FUR&thinsp;33%, CritTime&thinsp;27%. FT capped at 1.0 in composite (Braess gain does not inflate the score).</p>
+
+            <!-- ── SECTION 3: Supporting / display metrics ── -->
+            <h3>Supporting Metrics</h3>
+            <table class="metrics-ref-table">
+                <thead><tr><th>Metric</th><th>Description</th></tr></thead>
+                <tbody>
+                    <tr><td>Throughput</td><td>Average tasks completed per tick (100-tick rolling mean).</td></tr>
+                    <tr><td>MVA</td><td>Chart display only — 10-sample moving average applied to the throughput series for visual smoothness. Not a reported metric; the underlying 100-tick rolling mean is the actual metric.</td></tr>
+                    <tr><td>MTTR</td><td>Mean recovery time of cascade-affected neighbors (not dead agents). 0.0 when no cascade occurs.</td></tr>
+                    <tr><td>MTBF</td><td>Mean interval between fault events. Requires 2+ events.</td></tr>
+                    <tr><td>Propagation Rate</td><td>Average fraction of alive fleet affected per fault event (ADG cascade-based, observatory only). Echoes fault config; <strong>Attack Rate is preferred</strong> for experiment reporting.</td></tr>
+                    <tr><td>Survival Rate</td><td>Fraction of initial fleet still alive.</td></tr>
+                    <tr><td>Wait Ratio</td><td>Fraction of actions where alive agents wait instead of moving. Includes solver waits, collision holds, and latency. Dead agents excluded.</td></tr>
+                    <tr><td>Cascade Spread</td><td>Average number of agents affected per fault event via ADG BFS. Higher = wider impact per incident.</td></tr>
+                    <tr><td>Tasks Completed</td><td>Total pickup-to-delivery tasks completed since simulation start. Compare against fault-free baseline to gauge cumulative productivity loss.</td></tr>
+                    <tr><td>Impacted Area</td><td>Throughput deviation vs baseline: <span class="formula">(live &minus; baseline)&thinsp;/&thinsp;baseline &times; 100</span>. Equivalent to (FT &minus; 1)&thinsp;&times;&thinsp;100. Kept for backwards compatibility.</td></tr>
+                    <tr><td>Deficit Integral</td><td>Cumulative sum of ticks where live tasks fell behind the baseline. Higher = more total productivity lost to faults.</td></tr>
+                    <tr><td>Surplus Integral</td><td>Cumulative sum of ticks where live tasks exceeded the baseline (Braess paradox). <span class="formula">Net = Deficit &minus; Surplus</span>.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+
+</html>

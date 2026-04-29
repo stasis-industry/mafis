@@ -1,0 +1,91 @@
+name: Deploy WASM
+
+on:
+  push:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  deploy:
+    name: Build WASM & Deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from Cargo.toml
+        id: version
+        run: |
+          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Detected version: $VERSION"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            libudev-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            pkg-config
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version 0.2.115 --locked
+
+      - name: Install binaryen (wasm-opt)
+        run: sudo apt-get install -y binaryen
+
+      - name: Run tests
+        run: cargo test
+
+      - name: Build WASM (release)
+        run: cargo build --release --target wasm32-unknown-unknown
+
+      - name: Build topology manifest
+        run: sh topologies/build-manifest.sh
+
+      - name: Generate JS bindings
+        run: |
+          wasm-bindgen --out-dir web --target web \
+            target/wasm32-unknown-unknown/release/mafis.wasm
+
+      - name: Optimize WASM binary (wasm-opt)
+        run: |
+          wasm-opt -Oz --enable-bulk-memory --enable-mutable-globals \
+            --enable-nontrapping-float-to-int --enable-sign-ext \
+            -o web/mafis_bg.wasm.opt web/mafis_bg.wasm
+          mv web/mafis_bg.wasm.opt web/mafis_bg.wasm
+
+      - name: Package WASM artifacts
+        run: tar -czf mafis-wasm.tar.gz -C web .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          files: |
+            mafis-wasm.tar.gz
+          generate_release_notes: true
+          make_latest: true
+
+      - name: Trigger website rebuild
+        run: |
+          curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.WEBSITE_DISPATCH_TOKEN }}" \
+            https://api.github.com/repos/stasis-industries/stasis-website/dispatches \
+            -d '{"event_type":"wasm-updated","client_payload":{"tag":"v${{ steps.version.outputs.version }}"}}'
