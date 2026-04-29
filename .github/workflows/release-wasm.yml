@@ -63,9 +63,14 @@ jobs:
             target/wasm32-unknown-unknown/release/mafis.wasm
 
       - name: Optimize WASM binary (wasm-opt)
+        # `--enable-simd` is required because `.cargo/config.toml` sets
+        # `target-feature=+simd128`, which causes rustc to emit v128 SIMD
+        # instructions. Without this flag wasm-opt fails validation with
+        # "SIMD operation (SIMD is disabled)".
         run: |
           wasm-opt -Oz --enable-bulk-memory --enable-mutable-globals \
             --enable-nontrapping-float-to-int --enable-sign-ext \
+            --enable-simd \
             -o web/mafis_bg.wasm.opt web/mafis_bg.wasm
           mv web/mafis_bg.wasm.opt web/mafis_bg.wasm
 
